@@ -3,15 +3,14 @@ import numpy as np
 import pandas as pd
 import csv
 import pandas
-from dotenv import load_dotenv, dotenv_values
 import os
 from matplotlib import colors
 import yfinance as yf
 import random
 
 
-class DataPreprocessor():
-    """ A class to load and preprocess the data for the cascaded lstm model """
+class DataPreprocessor(object):
+    """ A class to load and preprocess the data """
 
     def __init__(self, filename, split, cols, cols_to_norm, pred_len):
         dataframe = pd.read_csv(filename)
