@@ -1,12 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import csv
-import pandas
-import os
-from matplotlib import colors
-import yfinance as yf
-import random
 
 
 class DataPreprocessor(object):
@@ -91,7 +85,6 @@ class DataPreprocessor(object):
         y = window[-1, [0]]
         return x, y
 
-    #
     def normalise_windows(self, window_data, single_window=False):
         """Normalise window with a base value of zero"""
         normalised_data = []
