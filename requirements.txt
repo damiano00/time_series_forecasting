@@ -13,3 +13,4 @@ scikit-learn~=1.6.1
 keras~=2.15.0
 tensorflow~=2.15.0
 tf-keras~=2.15.0
+gymnasium~=1.0.0

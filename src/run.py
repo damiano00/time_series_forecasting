@@ -63,6 +63,7 @@ def output_results_and_errors_multiple(predicted_data, true_data, true_data_base
     # Truncate data to ensure lengths are consistent
     min_length = min(len(save_df['Predicted_Data']), len(save_df['True_Data']))
     predicted_data = save_df['Predicted_Data'][:min_length]
+    predicted_data.fillna(method='ffill', inplace=True)
     true_data = save_df['True_Data'][:min_length]
 
     # Calculate MAE, MSE, R²
@@ -134,7 +135,7 @@ def main(configurations, data_filename, sentiment, flag_pred, model, num_csvs):
         steps_per_epoch=steps_per_epoch,
         save_dir=configurations['model']['save_dir'],
         sentiment_type=sentiment,
-        model_name=model,
+        model_name=model_name,
         num_csvs=num_csvs
     )
     if flag_pred:
@@ -155,22 +156,20 @@ def main(configurations, data_filename, sentiment, flag_pred, model, num_csvs):
 
 if __name__ == '__main__':
     model_name = 'LSTM'
-    sentiment_types = ["sentiment"] # or "nonsentiment"
+    sentiment_types = ["sentiment"]  # or "nonsentiment"
 
     # Test csvs = 50
-    names_50 = ['aal.csv', 'AAPL.csv', 'ABBV.csv', 'AMD.csv', 'amgn.csv', 'AMZN.csv', 'BABA.csv',
-                'bhp.csv', 'bidu.csv', 'biib.csv', 'BRK-B.csv', 'C.csv', 'cat.csv', 'cmcsa.csv', 'cmg.csv',
-                'cop.csv', 'COST.csv', 'crm.csv', 'CVX.csv', 'dal.csv', 'DIS.csv', 'ebay.csv', 'GE.csv',
-                'gild.csv', 'gld.csv', 'GOOG.csv', 'gsk.csv', 'INTC.csv', 'KO.csv', 'mrk.csv', 'MSFT.csv',
-                'mu.csv', 'nke.csv', 'nvda.csv', 'orcl.csv', 'pep.csv', 'pypl.csv', 'qcom.csv', 'QQQ.csv',
-                'SBUX.csv', 'T.csv', 'tgt.csv', 'tm.csv', 'TSLA.csv', 'TSM.csv', 'uso.csv', 'v.csv', 'WFC.csv',
-                'WMT.csv', 'xlf.csv']
+    names_50 = ['aal.csv', 'AAPL.csv', 'ABBV.csv', 'AMD.csv', 'amgn.csv', 'AMZN.csv', 'BABA.csv', 'bhp.csv', 'bidu.csv',
+                'biib.csv', 'BRK-B.csv', 'C.csv', 'cat.csv', 'cmcsa.csv', 'cmg.csv', 'cop.csv', 'COST.csv', 'crm.csv',
+                'CVX.csv', 'dal.csv', 'DIS.csv', 'ebay.csv', 'GE.csv', 'gild.csv', 'gld.csv', 'GOOG.csv', 'gsk.csv',
+                'INTC.csv', 'KO.csv', 'mrk.csv', 'MSFT.csv', 'mu.csv', 'nke.csv', 'nvda.csv', 'orcl.csv', 'pep.csv',
+                'pypl.csv', 'qcom.csv', 'QQQ.csv', 'SBUX.csv', 'T.csv', 'tgt.csv', 'tm.csv', 'TSLA.csv', 'TSM.csv',
+                'uso.csv', 'v.csv', 'WFC.csv', 'WMT.csv', 'xlf.csv']
 
     # Test csvs = 25
-    names_25 = ['AAPL.csv', 'ABBV.csv', 'AMZN.csv', 'BABA.csv', 'BRK-B.csv', 'C.csv', 'COST.csv', 'CVX.csv', 'DIS.csv',
-                'GE.csv',
-                'INTC.csv', 'MSFT.csv', 'nvda.csv', 'pypl.csv', 'QQQ.csv', 'SBUX.csv', 'T.csv', 'TSLA.csv', 'WFC.csv',
-                'KO.csv', 'AMD.csv', 'TSM.csv', 'GOOG.csv', 'WMT.csv']
+    names_25 = ['AAPL.csv', 'ABBV.csv', 'AMZN.csv', 'BABA.csv', 'BRK-B.csv', 'ebay.csv', 'C.csv', 'COST.csv', 'CVX.csv',
+                'DIS.csv', 'GE.csv', 'INTC.csv', 'MSFT.csv', 'nvda.csv', 'pypl.csv', 'QQQ.csv', 'SBUX.csv', 'T.csv',
+                'TSLA.csv', 'WFC.csv', 'KO.csv', 'AMD.csv', 'TSM.csv', 'GOOG.csv', 'WMT.csv']
 
     # Test csvs = 5
     names_5 = ['KO.csv', 'AMD.csv', 'TSM.csv', 'GOOG.csv', 'WMT.csv']
