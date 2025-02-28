@@ -13,6 +13,7 @@ class StockTradingEnv(gym.Env):
       - [91:121]: RSI for 30 stocks.
       - [121:151]: CCI for 30 stocks.
       - [151:181]: ADX for 30 stocks.
+      - [181:211]: Scaled sentiment for 30 stocks.
     """
     def __init__(self, data, initial_balance=1e6, max_shares=100, reward_scaling=1e-4, turbulence_threshold=100):
         super(StockTradingEnv, self).__init__()
@@ -28,7 +29,7 @@ class StockTradingEnv(gym.Env):
         self.stock_owned = np.zeros(self.n_stocks, dtype=np.int32)
         self.current_step = 0
 
-        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(181,), dtype=np.float32)
+        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(211,), dtype=np.float32)
         self.action_space = spaces.Box(low=-1, high=1, shape=(self.n_stocks,), dtype=np.float32)
 
         self.transaction_cost_pct = 0.001  # 0.1% transaction cost
@@ -50,18 +51,24 @@ class StockTradingEnv(gym.Env):
     def _get_indicators(self):
         # Get indicator values for the current time step.
         macd = self.data['MACD'][self.current_step, :].astype(np.float32)
+        macd = np.nan_to_num(macd, nan=0.0)
         rsi = self.data['RSI'][self.current_step, :].astype(np.float32)
+        rsi = np.nan_to_num(rsi, nan=0.0)
         cci = self.data['CCI'][self.current_step, :].astype(np.float32)
+        cci = np.nan_to_num(cci, nan=0.0)
         adx = self.data['ADX'][self.current_step, :].astype(np.float32)
-        return macd, rsi, cci, adx
+        adx = np.nan_to_num(adx, nan=0.0)
+        sentiment_scaled = self.data['Scaled_sentiment'][self.current_step, :].astype(np.float32)
+        sentiment_scaled = np.nan_to_num(sentiment_scaled, nan=0.0)
+        return macd, rsi, cci, adx, sentiment_scaled
 
     def _get_state(self):
-        macd, rsi, cci, adx = self._get_indicators()
+        macd, rsi, cci, adx, sentiment_scaled = self._get_indicators()
         state = np.concatenate((
             np.array([self.balance], dtype=np.float32),
             self.prices,
             self.stock_owned.astype(np.float32),
-            macd, rsi, cci, adx
+            macd, rsi, cci, adx, sentiment_scaled
         ))
         return state
 
@@ -71,9 +78,9 @@ class StockTradingEnv(gym.Env):
 
     def step(self, agent_action):
         agent_action = np.clip(agent_action, -1, 1)
-        trade_shares = (agent_action * self.max_shares).astype(np.int32)
         # this gave enormous negative cumulative returns
-        # trade_shares = np.nan_to_num(agent_action * self.max_shares, nan=0.0, posinf=self.max_shares, neginf=-self.max_shares).astype(np.int32)
+        # trade_shares = (agent_action * self.max_shares).astype(np.int32)
+        trade_shares = np.nan_to_num(agent_action * self.max_shares, nan=0.0, posinf=self.max_shares, neginf=-self.max_shares).astype(np.int32)
 
         for i in range(self.n_stocks):
             price = self.prices[i]

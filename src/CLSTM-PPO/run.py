@@ -59,12 +59,10 @@ def load_data(data_folder="data", selected_stocks=30):
     for each stock, aligns them by common dates, and returns a dictionary of NumPy arrays:
       - Each array has shape (num_timesteps, n_stocks)
     """
-    # Get indicators for each stock
+    print_stock_dates(data_folder)
     indicators = get_indicators(data_folder)
-    # Determine common index range
     common_index = determine_index_range(indicators)
     print(f"Common date range: {common_index[0]} to {common_index[-1]}")
-    # Reindex each series to the common_index and forward/backward fill missing values.
     combined = {}
     for ind in indicators:
         df_list = []
@@ -78,88 +76,90 @@ def load_data(data_folder="data", selected_stocks=30):
     data_arrays = {ind: combined[ind].values for ind in combined}
     return data_arrays
 
+def print_stock_dates(folder_path):
+    csv_files = glob.glob(os.path.join(folder_path, '*.csv'))
+    if not csv_files:
+        print("No CSV files found in the folder.")
+        return
+    for csv_file in csv_files:
+        file_name = os.path.basename(csv_file)
+        try:
+            df = pd.read_csv(csv_file, parse_dates=['Date'])
+            if 'Date' not in df.columns:
+                print(f"{file_name} does not contain a 'Date' column.")
+                continue
+            if df.empty:
+                print(f"{file_name} is empty.")
+                continue
+            start_date = df['Date'].min()
+            end_date = df['Date'].max()
+            start_str = start_date.strftime('%Y-%m-%d')
+            end_str = end_date.strftime('%Y-%m-%d')
+            print(f"{file_name}: Start Date = {start_str}, End Date = {end_str}")
+        except Exception as e:
+            print(f"Error processing {file_name}: {e}")
+
 def get_indicators(data_folder):
     file_paths = sorted(glob.glob(os.path.join(data_folder, "*.csv")))
     if not file_paths:
         raise ValueError(f"No CSV files found in folder {data_folder}")
-
     indicators = {
         'price': {},
         'MACD': {},
         'RSI': {},
         'CCI': {},
-        'ADX': {}
+        'ADX': {},
+        'Scaled_sentiment': {}
     }
-
-    # Process each CSV file
     for fp in file_paths:
         df = pd.read_csv(fp, parse_dates=['Date'])
-        # Convert to date (dropping time) if desired
         df['Date'] = pd.to_datetime(df['Date']).dt.date
         df.sort_values('Date', inplace=True)
         df.set_index('Date', inplace=True)
-        # scaling with MinMaxScaler
         scaler = MinMaxScaler()
         df['Adj close'] = scaler.fit_transform(df['Adj close'].values.reshape(-1, 1)).flatten()
-        # Extract price data
         price = df['Adj close']
-        # Compute indicators
         macd = compute_macd(df, price_col='Adj close')
         rsi = compute_rsi(df, price_col='Adj close')
         cci = compute_cci(df, window=20)
         adx = compute_adx(df, window=14)
-        # Store indicators in the dictionary
+        # Use only Scaled_sentiment
+        scaled_sentiment = np.mean(df['Scaled_sentiment'].values)
+        scaled_sentiment = pd.Series([scaled_sentiment] * len(price), index=price.index)
         stock_key = os.path.splitext(os.path.basename(fp))[0]
         indicators['price'][stock_key] = price
         indicators['MACD'][stock_key] = macd
         indicators['RSI'][stock_key] = rsi
         indicators['CCI'][stock_key] = cci
         indicators['ADX'][stock_key] = adx
+        indicators['Scaled_sentiment'][stock_key] = scaled_sentiment
     return indicators
-
 
 def determine_index_range(indicators):
     price_data = indicators['price']
-    # Map each stock to its start and end dates.
-    stock_dates = {
-        stock: (df.index.min(), df.index.max())
-        for stock, df in price_data.items()
-    }
-    # Identify stocks with the highest start and lowest end dates.
+    stock_dates = {stock: (df.index.min(), df.index.max()) for stock, df in price_data.items()}
     highest_start_stock, (highest_start, _) = max(stock_dates.items(), key=lambda item: item[1][0])
     lowest_end_stock, (_, lowest_end) = min(stock_dates.items(), key=lambda item: item[1][1])
     common_start = max(start for start, _ in stock_dates.values())
     common_end = min(end for _, end in stock_dates.values())
-    # If there's no overlap, exclude the outlier stocks and try again.
     while common_start > common_end:
         price_data.pop(highest_start_stock, None)
         price_data.pop(lowest_end_stock, None)
         if not price_data:
             raise ValueError("No stocks remaining after exclusion. Check date ranges.")
-        stock_dates = {
-            stock: (df.index.min(), df.index.max())
-            for stock, df in price_data.items()
-        }
+        stock_dates = {stock: (df.index.min(), df.index.max()) for stock, df in price_data.items()}
         common_start = max(start for start, _ in stock_dates.values())
         common_end = min(end for _, end in stock_dates.values())
     print(f"Remaining stocks: {len(price_data)}")
     return pd.date_range(start=common_start, end=common_end, freq='D')
 
-
 def backtest_agent(agent, env, time_window):
-    """
-    Runs the trained agent on the test environment and records portfolio values.
-    """
     state = env.reset()
-    # Initialize a state sequence by repeating the initial state
     state_seq = np.array([state] * time_window)
     portfolio_values = []
     done = False
-
-    # Record initial portfolio value
     initial_portfolio = env.balance + np.sum(env.prices * env.stock_owned)
     portfolio_values.append(initial_portfolio)
-
     while not done:
         action, _, _ = agent.select_action(state_seq)
         next_state, reward, done, _ = env.step(action)
@@ -169,12 +169,6 @@ def backtest_agent(agent, env, time_window):
     return portfolio_values
 
 def compute_performance_metrics(portfolio_values):
-    """
-    Computes performance metrics:
-      - Cumulative Return (CR)
-      - Maximum Earning Rate (MER)
-      - Sharpe Ratio (SR)
-    """
     portfolio_values = np.array(portfolio_values)
     initial_value = portfolio_values[0]
     final_value = portfolio_values[-1]
@@ -185,41 +179,43 @@ def compute_performance_metrics(portfolio_values):
     return cumulative_return, max_earning_rate, sharpe_ratio
 
 if __name__ == "__main__":
-    # Hyperparameters
+    # Adjusted Hyperparameters
     TIME_WINDOW = 30
-    STATE_DIM = 1 + 30 * 6  # [balance, prices, holdings, MACD, RSI, CCI, ADX] = 181
+    STATE_DIM = 1 + 30 * 7  # balance + 6 original features (prices, holdings, MACD, RSI, CCI, ADX) + Scaled_sentiment = 211
     FEATURE_DIM = 128
     N_STOCKS = 30
-    TOTAL_TIMESTEPS = 10000
+    TOTAL_TIMESTEPS = 50000
     UPDATE_TIMESTEP = 128
     LR = 3e-4
 
-    # Load data from CSV files in the "data" folder
-    data = load_data(data_folder="data", selected_stocks=N_STOCKS)
-    total_steps = data['price'].shape[0]
-    split_index = int(total_steps * 0.8)  # 80% for in-sample training, 20% for out-of-sample testing
+    # Adjusted Environment Parameters
+    INITIAL_BALANCE = 1e6
+    MAX_SHARES = 1000
+    REWARD_SCALING = 1e-2
+    TURBULENCE_THRESHOLD = 100
 
-    # Create in-sample and out-of-sample data dictionaries
+    data = load_data(data_folder="FNSPID/data", selected_stocks=N_STOCKS)
+    total_steps = data['price'].shape[0]
+    split_index = int(total_steps * 0.8)  # 80% in-sample, 20% out-of-sample
+
     train_data = {k: v[:split_index] for k, v in data.items()}
     test_data = {k: v[split_index:] for k, v in data.items()}
 
-    # Create training and testing environments (StockTradingEnv expects a data dict)
     train_env = StockTradingEnv(
         data=train_data,
-        initial_balance=1e6,
-        max_shares=100,
-        reward_scaling=1e-4,
-        turbulence_threshold=100
+        initial_balance=INITIAL_BALANCE,
+        max_shares=MAX_SHARES,
+        reward_scaling=REWARD_SCALING,
+        turbulence_threshold=TURBULENCE_THRESHOLD
     )
     test_env = StockTradingEnv(
         data=test_data,
-        initial_balance=1e6,
-        max_shares=100,
-        reward_scaling=1e-4,
-        turbulence_threshold=100
+        initial_balance=INITIAL_BALANCE,
+        max_shares=MAX_SHARES,
+        reward_scaling=REWARD_SCALING,
+        turbulence_threshold=TURBULENCE_THRESHOLD
     )
 
-    # Instantiate and train the PPO agent on in-sample data
     agent = PPOAgent(
         time_window=TIME_WINDOW,
         state_dim=STATE_DIM,
@@ -229,12 +225,12 @@ if __name__ == "__main__":
     )
     agent.train(train_env, total_timesteps=TOTAL_TIMESTEPS, update_timestep=UPDATE_TIMESTEP)
 
-    # Optionally, save trained models
-    agent.lstm_pre.save("models/lstm_pre.keras")
-    agent.actor.save("models/lstm_actor.keras")
-    agent.critic.save("models/lstm_critic.keras")
+    if not os.path.exists("saved_models_sentiment"):
+        os.makedirs("saved_models_sentiment")
+    agent.lstm_pre.save("saved_models_sentiment/lstm_pre.keras")
+    agent.actor.save("saved_models_sentiment/lstm_actor.keras")
+    agent.critic.save("saved_models_sentiment/lstm_critic.keras")
 
-    # Backtest the trained agent on out-of-sample data
     portfolio_values = backtest_agent(agent, test_env, TIME_WINDOW)
     cr, mer, sr = compute_performance_metrics(portfolio_values)
 
