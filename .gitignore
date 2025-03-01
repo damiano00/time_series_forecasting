@@ -782,4 +782,5 @@ $RECYCLE.BIN/
 /FNSPID_Financial_News_Dataset-main/
 /docs/FNSPID_repository.zip
 /src/old/
-/src/CLSTM-PPO/FNSPID/
+/src/CLSTM-PPO/FNSPID/Stock_news
+/src/CLSTM-PPO/FNSPID/Stock_price

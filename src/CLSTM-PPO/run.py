@@ -1,41 +1,48 @@
 import os
 import glob
+from datetime import datetime
 import numpy as np
 import pandas as pd
+from matplotlib import pyplot as plt
 from gym_env import StockTradingEnv  # Make sure your StockTradingEnv accepts a 'data' dict
 from ppo_agent import PPOAgent
 from sklearn.preprocessing import MinMaxScaler
 
+
 def compute_ema(series, span):
     return series.ewm(span=span, adjust=False).mean()
 
-def compute_macd(df, price_col='Adj close', span_short=12, span_long=26):
+
+def compute_macd(df, price_col='adj_close', span_short=12, span_long=26):
     ema_short = compute_ema(df[price_col], span=span_short)
     ema_long = compute_ema(df[price_col], span=span_long)
     macd = ema_short - ema_long
     return macd
 
-def compute_rsi(df, price_col='Adj close', window=14):
+
+def compute_rsi(df, price_col='adj_close', window=14):
     delta = df[price_col].diff()
     gain = delta.clip(lower=0)
     loss = -delta.clip(upper=0)
-    avg_gain = gain.ewm(alpha=1/window, adjust=False).mean()
-    avg_loss = loss.ewm(alpha=1/window, adjust=False).mean()
+    avg_gain = gain.ewm(alpha=1 / window, adjust=False).mean()
+    avg_loss = loss.ewm(alpha=1 / window, adjust=False).mean()
     rs = avg_gain / (avg_loss + 1e-8)
     rsi = 100 - (100 / (1 + rs))
     return rsi
 
+
 def compute_cci(df, window=20):
-    tp = (df['High'] + df['Low'] + df['Close']) / 3
+    tp = (df['high'] + df['low'] + df['close']) / 3
     sma = tp.rolling(window=window).mean()
     mad = tp.rolling(window=window).apply(lambda x: np.mean(np.abs(x - np.mean(x))), raw=True)
     cci = (tp - sma) / (0.015 * mad + 1e-8)
     return cci
 
+
 def compute_adx(df, window=14):
-    high = df['High']
-    low = df['Low']
-    close = df['Close']
+    high = df['high']
+    low = df['low']
+    close = df['close']
     tr1 = high - low
     tr2 = (high - close.shift()).abs()
     tr3 = (low - close.shift()).abs()
@@ -53,7 +60,8 @@ def compute_adx(df, window=14):
     adx = dx.rolling(window=window).mean()
     return adx
 
-def load_data(data_folder="data", selected_stocks=30):
+
+def load_data(data_folder, selected_stocks=30):
     """
     Loads CSV files from the given folder, computes technical indicators (price, MACD, RSI, CCI, ADX)
     for each stock, aligns them by common dates, and returns a dictionary of NumPy arrays:
@@ -76,6 +84,7 @@ def load_data(data_folder="data", selected_stocks=30):
     data_arrays = {ind: combined[ind].values for ind in combined}
     return data_arrays
 
+
 def print_stock_dates(folder_path):
     csv_files = glob.glob(os.path.join(folder_path, '*.csv'))
     if not csv_files:
@@ -84,20 +93,21 @@ def print_stock_dates(folder_path):
     for csv_file in csv_files:
         file_name = os.path.basename(csv_file)
         try:
-            df = pd.read_csv(csv_file, parse_dates=['Date'])
-            if 'Date' not in df.columns:
-                print(f"{file_name} does not contain a 'Date' column.")
+            df = pd.read_csv(csv_file, parse_dates=['date'])
+            if 'date' not in df.columns:
+                print(f"{file_name} does not contain a 'date' column.")
                 continue
             if df.empty:
                 print(f"{file_name} is empty.")
                 continue
-            start_date = df['Date'].min()
-            end_date = df['Date'].max()
+            start_date = df['date'].min()
+            end_date = df['date'].max()
             start_str = start_date.strftime('%Y-%m-%d')
             end_str = end_date.strftime('%Y-%m-%d')
             print(f"{file_name}: Start Date = {start_str}, End Date = {end_str}")
         except Exception as e:
             print(f"Error processing {file_name}: {e}")
+
 
 def get_indicators(data_folder):
     file_paths = sorted(glob.glob(os.path.join(data_folder, "*.csv")))
@@ -112,15 +122,15 @@ def get_indicators(data_folder):
         'Scaled_sentiment': {}
     }
     for fp in file_paths:
-        df = pd.read_csv(fp, parse_dates=['Date'])
-        df['Date'] = pd.to_datetime(df['Date']).dt.date
-        df.sort_values('Date', inplace=True)
-        df.set_index('Date', inplace=True)
+        df = pd.read_csv(fp, parse_dates=['date'])
+        df['date'] = pd.to_datetime(df['date']).dt.date
+        df.sort_values('date', inplace=True)
+        df.set_index('date', inplace=True)
         scaler = MinMaxScaler()
-        df['Adj close'] = scaler.fit_transform(df['Adj close'].values.reshape(-1, 1)).flatten()
-        price = df['Adj close']
-        macd = compute_macd(df, price_col='Adj close')
-        rsi = compute_rsi(df, price_col='Adj close')
+        df['adj_close'] = scaler.fit_transform(df['adj_close'].values.reshape(-1, 1)).flatten()
+        price = df['adj_close']
+        macd = compute_macd(df, price_col='adj_close')
+        rsi = compute_rsi(df, price_col='adj_close')
         cci = compute_cci(df, window=20)
         adx = compute_adx(df, window=14)
         # Use only Scaled_sentiment
@@ -134,6 +144,7 @@ def get_indicators(data_folder):
         indicators['ADX'][stock_key] = adx
         indicators['Scaled_sentiment'][stock_key] = scaled_sentiment
     return indicators
+
 
 def determine_index_range(indicators):
     price_data = indicators['price']
@@ -153,6 +164,7 @@ def determine_index_range(indicators):
     print(f"Remaining stocks: {len(price_data)}")
     return pd.date_range(start=common_start, end=common_end, freq='D')
 
+
 def backtest_agent(agent, env, time_window):
     state = env.reset()
     state_seq = np.array([state] * time_window)
@@ -168,6 +180,7 @@ def backtest_agent(agent, env, time_window):
         state_seq = np.vstack([state_seq[1:], next_state])
     return portfolio_values
 
+
 def compute_performance_metrics(portfolio_values):
     portfolio_values = np.array(portfolio_values)
     initial_value = portfolio_values[0]
@@ -178,15 +191,18 @@ def compute_performance_metrics(portfolio_values):
     sharpe_ratio = (np.mean(daily_returns) / (np.std(daily_returns) + 1e-8)) * np.sqrt(252)
     return cumulative_return, max_earning_rate, sharpe_ratio
 
+
 if __name__ == "__main__":
     # Adjusted Hyperparameters
     TIME_WINDOW = 30
-    STATE_DIM = 1 + 30 * 7  # balance + 6 original features (prices, holdings, MACD, RSI, CCI, ADX) + Scaled_sentiment = 211
+    STATE_DIM = 1 + 30 * 7  # balance + 7 original features (prices, holdings, MACD, RSI, CCI, ADX, Scaled_sentiment) = 211
     FEATURE_DIM = 128
     N_STOCKS = 30
     TOTAL_TIMESTEPS = 50000
     UPDATE_TIMESTEP = 128
     LR = 3e-4
+    SENTIMENT = "sentiment"  # or "no_sentiment"
+    DATA_FOLDER = "FNSPID/data_30_sentiment" if SENTIMENT == "sentiment" else "FNSPID/data_30_no_sentiment"
 
     # Adjusted Environment Parameters
     INITIAL_BALANCE = 1e6
@@ -194,7 +210,27 @@ if __name__ == "__main__":
     REWARD_SCALING = 1e-2
     TURBULENCE_THRESHOLD = 100
 
-    data = load_data(data_folder="FNSPID/data", selected_stocks=N_STOCKS)
+    plots_path = f'results/{SENTIMENT}_{N_STOCKS}/plots'
+    saved_models_path = f'results/{SENTIMENT}_{N_STOCKS}/saved_models'
+    evaluations_path = f'results/{SENTIMENT}_{N_STOCKS}/evaluations'
+    if not os.path.exists(plots_path): os.makedirs(plots_path)
+    if not os.path.exists(saved_models_path): os.makedirs(saved_models_path)
+    if not os.path.exists(evaluations_path): os.makedirs(evaluations_path)
+
+    print(f'----- Training with {N_STOCKS} stocks and sentiment: {SENTIMENT} -----')
+    print(f'\nTime window: {TIME_WINDOW}'
+          f'\nState dimension: {STATE_DIM}'
+          f'\nFeature dimension: {FEATURE_DIM}'
+          f'\nNumber of stocks: {N_STOCKS}'
+          f'\nTotal timesteps: {TOTAL_TIMESTEPS}'
+          f'\nUpdate timestep: {UPDATE_TIMESTEP}'
+          f'\nLearning rate: {LR}'
+          f'\nInitial balance: {INITIAL_BALANCE}'
+          f'\nMax shares: {MAX_SHARES}',
+          f'\nReward scaling: {REWARD_SCALING}',
+          f'\nTurbulence threshold: {TURBULENCE_THRESHOLD}')
+
+    data = load_data(data_folder=DATA_FOLDER, selected_stocks=N_STOCKS)
     total_steps = data['price'].shape[0]
     split_index = int(total_steps * 0.8)  # 80% in-sample, 20% out-of-sample
 
@@ -215,7 +251,6 @@ if __name__ == "__main__":
         reward_scaling=REWARD_SCALING,
         turbulence_threshold=TURBULENCE_THRESHOLD
     )
-
     agent = PPOAgent(
         time_window=TIME_WINDOW,
         state_dim=STATE_DIM,
@@ -223,17 +258,87 @@ if __name__ == "__main__":
         n_stocks=N_STOCKS,
         lr=LR
     )
+
+    print(f'training agent started at {datetime.now().strftime("%Y%m%d%H")}...')
     agent.train(train_env, total_timesteps=TOTAL_TIMESTEPS, update_timestep=UPDATE_TIMESTEP)
+    print(f'training agent finished at {datetime.now().strftime("%Y%m%d%H")}')
 
-    if not os.path.exists("saved_models_sentiment"):
-        os.makedirs("saved_models_sentiment")
-    agent.lstm_pre.save("saved_models_sentiment/lstm_pre.keras")
-    agent.actor.save("saved_models_sentiment/lstm_actor.keras")
-    agent.critic.save("saved_models_sentiment/lstm_critic.keras")
+    agent.lstm_pre.save(os.path.join(saved_models_path, 'lstm_pre.keras'))
+    agent.actor.save(os.path.join(saved_models_path, 'lstm_actor.keras'))
+    agent.critic.save(os.path.join(saved_models_path, 'lstm_critic.keras'))
 
+    print(f'evaluating agent...')
     portfolio_values = backtest_agent(agent, test_env, TIME_WINDOW)
     cr, mer, sr = compute_performance_metrics(portfolio_values)
 
     print(f"Cumulative Return: {cr * 100:.2f}%")
     print(f"Maximum Earning Rate: {mer * 100:.2f}%")
     print(f"Sharpe Ratio: {sr:.2f}")
+
+    # save portfolio values to CSV
+    pd.Series(portfolio_values).to_csv(os.path.join(evaluations_path, 'portfolio_values.csv'))
+    # save cr, mer, sr to TXT
+    with open(os.path.join(evaluations_path, f'performance_metrics_{SENTIMENT}'), "w") as f:
+        f.write(f"Cumulative Return: {cr * 100:.2f}%\n")
+        f.write(f"Maximum Earning Rate: {mer * 100:.2f}%\n")
+        f.write(f"Sharpe Ratio: {sr:.2f}\n")
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(portfolio_values, label="Portfolio Value")
+    plt.title("Portfolio Value Over Time")
+    plt.xlabel("Time Steps")
+    plt.ylabel("Portfolio Value")
+    plt.legend()
+    plt.grid(True)
+    plt.savefig(os.path.join(plots_path, 'portfolio_value.png'))
+    plt.show()
+
+    # Plot equity curve
+    plt.figure(figsize=(10, 6))
+    plt.plot(portfolio_values, label="Portfolio Value")
+    plt.title("Equity Curve")
+    plt.xlabel("Time Steps")
+    plt.ylabel("Portfolio Value")
+    plt.legend()
+    plt.grid(True)
+    plt.savefig(os.path.join(plots_path, 'equity_curve.png'))
+    plt.show()
+
+    # Compute drawdowns (percentage difference between a portfolio's value and its previous peak value)
+    portfolio_series = pd.Series(portfolio_values)
+    rolling_max = portfolio_series.cummax()
+    drawdowns = (portfolio_series - rolling_max) / rolling_max
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(drawdowns, label="Drawdown")
+    plt.title("Portfolio Drawdown")
+    plt.xlabel("Time Steps")
+    plt.ylabel("Drawdown (%)")
+    plt.legend()
+    plt.grid(True)
+    plt.savefig(os.path.join(plots_path, 'portfolio_drawdown.png'))
+    plt.show()
+
+    # Compute daily returns and plot histogram
+    daily_returns = np.diff(portfolio_values) / portfolio_values[:-1]
+    plt.figure(figsize=(10, 6))
+    plt.hist(daily_returns, bins=30, edgecolor='k')
+    plt.title("Histogram of Daily Returns")
+    plt.xlabel("Daily Return")
+    plt.ylabel("Frequency")
+    plt.grid(True)
+    plt.savefig(os.path.join(plots_path, 'daily_returns_histogram.png'))
+    plt.show()
+
+    # Rolling volatility (e.g., 30-day volatility)
+    rolling_vol = portfolio_series.pct_change().rolling(window=30).std() * np.sqrt(252)
+    plt.figure(figsize=(10, 6))
+    plt.plot(rolling_vol, label="Rolling 30-day Volatility")
+    plt.title("Rolling Volatility")
+    plt.xlabel("Time Steps")
+    plt.ylabel("Volatility")
+    plt.legend()
+    plt.grid(True)
+    plt.savefig(os.path.join(plots_path, 'rolling_volatility.png'))
+    plt.show()
+
