@@ -38,4 +38,3 @@ def build_lstm_critic(feature_dim=128):
 
     model = Model(inputs=inputs, outputs=outputs, name="LSTMcritic")
     return model
-

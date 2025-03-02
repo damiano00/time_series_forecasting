@@ -40,7 +40,3 @@ def build_lstm_actor(feature_dim=128, n_stocks=30):
 
     model = Model(inputs=inputs, outputs=outputs, name="LSTMactor")
     return model
-
-
-
-

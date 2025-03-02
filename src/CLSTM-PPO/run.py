@@ -4,6 +4,8 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
+from textblob.en import sentiment
+
 from gym_env import StockTradingEnv  # Make sure your StockTradingEnv accepts a 'data' dict
 from ppo_agent import PPOAgent
 from sklearn.preprocessing import MinMaxScaler
@@ -61,31 +63,31 @@ def compute_adx(df, window=14):
     return adx
 
 
-def load_data(data_folder, selected_stocks=30):
+def load_data(data_folder, n_stocks=30, sentiment=True):
     """
     Loads CSV files from the given folder, computes technical indicators (price, MACD, RSI, CCI, ADX)
     for each stock, aligns them by common dates, and returns a dictionary of NumPy arrays:
       - Each array has shape (num_timesteps, n_stocks)
     """
-    print_stock_dates(data_folder)
-    indicators = get_indicators(data_folder)
+    check_stock_dates(data_folder)
+    indicators = get_indicators(data_folder, sentiment=sentiment)
     common_index = determine_index_range(indicators)
     print(f"Common date range: {common_index[0]} to {common_index[-1]}")
     combined = {}
     for ind in indicators:
         df_list = []
-        for key in sorted(indicators[ind].keys())[:selected_stocks]:
+        for key in sorted(indicators[ind].keys())[:n_stocks]:
             s = indicators[ind][key].reindex(common_index).ffill().bfill()
             df_list.append(s)
         combined[ind] = pd.concat(df_list, axis=1)
-        combined[ind].columns = sorted(indicators[ind].keys())[:selected_stocks]
+        combined[ind].columns = sorted(indicators[ind].keys())[:n_stocks]
     if len(common_index) == 0:
         raise ValueError("No common dates found among CSV files.")
     data_arrays = {ind: combined[ind].values for ind in combined}
     return data_arrays
 
 
-def print_stock_dates(folder_path):
+def check_stock_dates(folder_path):
     csv_files = glob.glob(os.path.join(folder_path, '*.csv'))
     if not csv_files:
         print("No CSV files found in the folder.")
@@ -95,32 +97,34 @@ def print_stock_dates(folder_path):
         try:
             df = pd.read_csv(csv_file, parse_dates=['date'])
             if 'date' not in df.columns:
-                print(f"{file_name} does not contain a 'date' column.")
-                continue
+                raise ValueError(f"{file_name} does not contain a 'date' column.")
             if df.empty:
-                print(f"{file_name} is empty.")
-                continue
-            start_date = df['date'].min()
-            end_date = df['date'].max()
-            start_str = start_date.strftime('%Y-%m-%d')
-            end_str = end_date.strftime('%Y-%m-%d')
-            print(f"{file_name}: Start Date = {start_str}, End Date = {end_str}")
+                raise ValueError(f"{file_name} is empty.")
         except Exception as e:
             print(f"Error processing {file_name}: {e}")
 
 
-def get_indicators(data_folder):
+def get_indicators(data_folder, sentiment):
     file_paths = sorted(glob.glob(os.path.join(data_folder, "*.csv")))
     if not file_paths:
         raise ValueError(f"No CSV files found in folder {data_folder}")
-    indicators = {
-        'price': {},
-        'MACD': {},
-        'RSI': {},
-        'CCI': {},
-        'ADX': {},
-        'Scaled_sentiment': {}
-    }
+    if sentiment:
+        indicators = {
+            'price': {},
+            'MACD': {},
+            'RSI': {},
+            'CCI': {},
+            'ADX': {},
+            'scaled_sentiment': {},
+        }
+    else:
+        indicators = {
+            'price': {},
+            'MACD': {},
+            'RSI': {},
+            'CCI': {},
+            'ADX': {},
+        }
     for fp in file_paths:
         df = pd.read_csv(fp, parse_dates=['date'])
         df['date'] = pd.to_datetime(df['date']).dt.date
@@ -133,16 +137,16 @@ def get_indicators(data_folder):
         rsi = compute_rsi(df, price_col='adj_close')
         cci = compute_cci(df, window=20)
         adx = compute_adx(df, window=14)
-        # Use only Scaled_sentiment
-        scaled_sentiment = np.mean(df['Scaled_sentiment'].values)
-        scaled_sentiment = pd.Series([scaled_sentiment] * len(price), index=price.index)
         stock_key = os.path.splitext(os.path.basename(fp))[0]
+        if sentiment:
+            scaled_sentiment = np.mean(df['scaled_sentiment'].values)
+            scaled_sentiment = pd.Series([scaled_sentiment] * len(price), index=price.index)
+            indicators['scaled_sentiment'][stock_key] = scaled_sentiment
         indicators['price'][stock_key] = price
         indicators['MACD'][stock_key] = macd
         indicators['RSI'][stock_key] = rsi
         indicators['CCI'][stock_key] = cci
         indicators['ADX'][stock_key] = adx
-        indicators['Scaled_sentiment'][stock_key] = scaled_sentiment
     return indicators
 
 
@@ -162,6 +166,8 @@ def determine_index_range(indicators):
         common_start = max(start for start, _ in stock_dates.values())
         common_end = min(end for _, end in stock_dates.values())
     print(f"Remaining stocks: {len(price_data)}")
+    print(f"Common start date: {common_start}")
+    print(f"Common end date: {common_end}")
     return pd.date_range(start=common_start, end=common_end, freq='D')
 
 
@@ -193,44 +199,58 @@ def compute_performance_metrics(portfolio_values):
 
 
 if __name__ == "__main__":
-    # Adjusted Hyperparameters
+    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' # 2 = INFO and WARNING messages are not printed (3 = ERROR messages are not printed)
+    curr_date = datetime.now().strftime("%Y%m%d%H")
+
+    # Hyperparameters
     TIME_WINDOW = 30
-    STATE_DIM = 1 + 30 * 7  # balance + 7 original features (prices, holdings, MACD, RSI, CCI, ADX, Scaled_sentiment) = 211
+    SENTIMENT = "sentiment"  # or "no_sentiment", this edit state dimension accordingly
+    STATE_DIM = 1 + 30 * 7 if SENTIMENT == "sentiment" else 1 + 30 * 6 # 211 if sentiment, 181 if no_sentiment
     FEATURE_DIM = 128
     N_STOCKS = 30
     TOTAL_TIMESTEPS = 50000
     UPDATE_TIMESTEP = 128
     LR = 3e-4
-    SENTIMENT = "sentiment"  # or "no_sentiment"
-    DATA_FOLDER = "FNSPID/data_30_sentiment" if SENTIMENT == "sentiment" else "FNSPID/data_30_no_sentiment"
+    DATA_FOLDER = f"datasets/data_{N_STOCKS}_{SENTIMENT}"
+    if not os.path.exists(DATA_FOLDER):
+        raise FileNotFoundError(f"Data folder {DATA_FOLDER} does not exist.")
 
-    # Adjusted Environment Parameters
+    # environment settings
     INITIAL_BALANCE = 1e6
     MAX_SHARES = 1000
     REWARD_SCALING = 1e-2
     TURBULENCE_THRESHOLD = 100
 
-    plots_path = f'results/{SENTIMENT}_{N_STOCKS}/plots'
-    saved_models_path = f'results/{SENTIMENT}_{N_STOCKS}/saved_models'
-    evaluations_path = f'results/{SENTIMENT}_{N_STOCKS}/evaluations'
+    # create folders for plots, saved models, and evaluations
+    plots_path = f'results/{SENTIMENT}_{N_STOCKS}_{curr_date}/plots'
+    saved_models_path = f'results/{SENTIMENT}_{N_STOCKS}_{curr_date}/saved_models'
+    evaluations_path = f'results/{SENTIMENT}_{N_STOCKS}_{curr_date}/evaluations'
     if not os.path.exists(plots_path): os.makedirs(plots_path)
     if not os.path.exists(saved_models_path): os.makedirs(saved_models_path)
     if not os.path.exists(evaluations_path): os.makedirs(evaluations_path)
 
-    print(f'----- Training with {N_STOCKS} stocks and sentiment: {SENTIMENT} -----')
-    print(f'\nTime window: {TIME_WINDOW}'
-          f'\nState dimension: {STATE_DIM}'
-          f'\nFeature dimension: {FEATURE_DIM}'
-          f'\nNumber of stocks: {N_STOCKS}'
-          f'\nTotal timesteps: {TOTAL_TIMESTEPS}'
-          f'\nUpdate timestep: {UPDATE_TIMESTEP}'
-          f'\nLearning rate: {LR}'
-          f'\nInitial balance: {INITIAL_BALANCE}'
-          f'\nMax shares: {MAX_SHARES}',
-          f'\nReward scaling: {REWARD_SCALING}',
-          f'\nTurbulence threshold: {TURBULENCE_THRESHOLD}')
+    # save the complete configuration in a file
+    with open(f'results/{SENTIMENT}_{N_STOCKS}_{curr_date}/config.txt', 'w') as f:
+        f.write(f'Time window: {TIME_WINDOW}\n'
+                f'Sentiment: {SENTIMENT}\n'
+                f'State dimension: {STATE_DIM}\n'
+                f'Feature dimension: {FEATURE_DIM}\n'
+                f'Number of stocks: {N_STOCKS}\n'
+                f'Total timesteps: {TOTAL_TIMESTEPS}\n'
+                f'Update timestep: {UPDATE_TIMESTEP}\n'
+                f'Learning rate: {LR}\n'
+                f'Initial balance: {INITIAL_BALANCE}\n'
+                f'Max shares: {MAX_SHARES}\n'
+                f'Reward scaling: {REWARD_SCALING}\n'
+                f'Turbulence threshold: {TURBULENCE_THRESHOLD}\n')
 
-    data = load_data(data_folder=DATA_FOLDER, selected_stocks=N_STOCKS)
+    # print the configuration in the console through the file
+    print(f'----- Training with {N_STOCKS} stocks and sentiment: {SENTIMENT} -----')
+    with open(f'results/{SENTIMENT}_{N_STOCKS}_{curr_date}/config.txt', 'r') as f:
+        print(f.read())
+
+    # Load data and create environments
+    data = load_data(data_folder=DATA_FOLDER, n_stocks=N_STOCKS, sentiment=(SENTIMENT == "sentiment"))
     total_steps = data['price'].shape[0]
     split_index = int(total_steps * 0.8)  # 80% in-sample, 20% out-of-sample
 
@@ -242,14 +262,20 @@ if __name__ == "__main__":
         initial_balance=INITIAL_BALANCE,
         max_shares=MAX_SHARES,
         reward_scaling=REWARD_SCALING,
-        turbulence_threshold=TURBULENCE_THRESHOLD
+        turbulence_threshold=TURBULENCE_THRESHOLD,
+        state_dim=STATE_DIM,
+        n_stocks=N_STOCKS,
+        sentiment=(SENTIMENT == "sentiment")
     )
     test_env = StockTradingEnv(
         data=test_data,
         initial_balance=INITIAL_BALANCE,
         max_shares=MAX_SHARES,
         reward_scaling=REWARD_SCALING,
-        turbulence_threshold=TURBULENCE_THRESHOLD
+        turbulence_threshold=TURBULENCE_THRESHOLD,
+        state_dim=STATE_DIM,
+        n_stocks=N_STOCKS,
+        sentiment=(SENTIMENT == "sentiment")
     )
     agent = PPOAgent(
         time_window=TIME_WINDOW,
@@ -258,10 +284,9 @@ if __name__ == "__main__":
         n_stocks=N_STOCKS,
         lr=LR
     )
-
-    print(f'training agent started at {datetime.now().strftime("%Y%m%d%H")}...')
+    print(f'----- Started training at: {datetime.now().strftime("%Y%m%d%H%M%S")} -----')
     agent.train(train_env, total_timesteps=TOTAL_TIMESTEPS, update_timestep=UPDATE_TIMESTEP)
-    print(f'training agent finished at {datetime.now().strftime("%Y%m%d%H")}')
+    print(f'----- Finished training at: {datetime.now().strftime("%Y%m%d%H%M%S")} -----')
 
     agent.lstm_pre.save(os.path.join(saved_models_path, 'lstm_pre.keras'))
     agent.actor.save(os.path.join(saved_models_path, 'lstm_actor.keras'))

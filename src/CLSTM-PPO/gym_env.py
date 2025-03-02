@@ -2,6 +2,7 @@ import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
 
+
 class StockTradingEnv(gym.Env):
     """
     Custom Gym environment for automated multi-stock trading.
@@ -15,21 +16,25 @@ class StockTradingEnv(gym.Env):
       - [151:181]: ADX for 30 stocks.
       - [181:211]: Scaled sentiment for 30 stocks.
     """
-    def __init__(self, data, initial_balance=1e6, max_shares=100, reward_scaling=1e-4, turbulence_threshold=100):
+
+    def __init__(self, data, initial_balance=1e6, max_shares=100, reward_scaling=1e-4, turbulence_threshold=100,
+                 state_dim=211, sentiment=True, n_stocks=30):
         super(StockTradingEnv, self).__init__()
-        self.n_stocks = 30
+        self.n_stocks = n_stocks
         self.data = data  # Data dictionary with keys: 'price', 'MACD', 'RSI', 'CCI', 'ADX'
         self.num_steps = self.data['price'].shape[0]
         self.initial_balance = initial_balance
         self.max_shares = max_shares
         self.reward_scaling = reward_scaling
         self.turbulence_threshold = turbulence_threshold
+        self.state_dim = state_dim
+        self.sentiment = sentiment
 
         self.balance = initial_balance
         self.stock_owned = np.zeros(self.n_stocks, dtype=np.int32)
         self.current_step = 0
 
-        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(211,), dtype=np.float32)
+        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(self.state_dim,), dtype=np.float32)
         self.action_space = spaces.Box(low=-1, high=1, shape=(self.n_stocks,), dtype=np.float32)
 
         self.transaction_cost_pct = 0.001  # 0.1% transaction cost
@@ -58,19 +63,32 @@ class StockTradingEnv(gym.Env):
         cci = np.nan_to_num(cci, nan=0.0)
         adx = self.data['ADX'][self.current_step, :].astype(np.float32)
         adx = np.nan_to_num(adx, nan=0.0)
-        sentiment_scaled = self.data['Scaled_sentiment'][self.current_step, :].astype(np.float32)
-        sentiment_scaled = np.nan_to_num(sentiment_scaled, nan=0.0)
-        return macd, rsi, cci, adx, sentiment_scaled
+        if self.sentiment:
+            scaled_sentiment = self.data['scaled_sentiment'][self.current_step, :].astype(np.float32)
+            scaled_sentiment = np.nan_to_num(scaled_sentiment, nan=0.0)
+            return macd, rsi, cci, adx, scaled_sentiment
+        else:
+            return macd, rsi, cci, adx
 
     def _get_state(self):
-        macd, rsi, cci, adx, sentiment_scaled = self._get_indicators()
-        state = np.concatenate((
-            np.array([self.balance], dtype=np.float32),
-            self.prices,
-            self.stock_owned.astype(np.float32),
-            macd, rsi, cci, adx, sentiment_scaled
-        ))
-        return state
+        if self.sentiment:
+            macd, rsi, cci, adx, scaled_sentiment = self._get_indicators()
+            state = np.concatenate((
+                np.array([self.balance], dtype=np.float32),
+                self.prices,
+                self.stock_owned.astype(np.float32),
+                macd, rsi, cci, adx, scaled_sentiment
+            ))
+            return state
+        else:
+            macd, rsi, cci, adx = self._get_indicators()
+            state = np.concatenate((
+                np.array([self.balance], dtype=np.float32),
+                self.prices,
+                self.stock_owned.astype(np.float32),
+                macd, rsi, cci, adx
+            ))
+            return state
 
     def _get_portfolio_value(self):
         # Calculate portfolio value as balance plus value of holdings.
@@ -80,7 +98,8 @@ class StockTradingEnv(gym.Env):
         agent_action = np.clip(agent_action, -1, 1)
         # this gave enormous negative cumulative returns
         # trade_shares = (agent_action * self.max_shares).astype(np.int32)
-        trade_shares = np.nan_to_num(agent_action * self.max_shares, nan=0.0, posinf=self.max_shares, neginf=-self.max_shares).astype(np.int32)
+        trade_shares = np.nan_to_num(agent_action * self.max_shares, nan=0.0, posinf=self.max_shares,
+                                     neginf=-self.max_shares).astype(np.int32)
 
         for i in range(self.n_stocks):
             price = self.prices[i]
