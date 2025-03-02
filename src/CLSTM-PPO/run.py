@@ -203,7 +203,7 @@ if __name__ == "__main__":
     warnings.filterwarnings("ignore")  # Suppresses Python warnings
     tf.get_logger().setLevel('ERROR')  # Ensures TensorFlow's logger shows only errors
 
-    curr_date = datetime.now().strftime("%Y%m%d%H")
+    curr_date = datetime.now().strftime("%Y%m%d%H%M%S")
 
     # Hyperparameters
     TIME_WINDOW = 30
@@ -287,9 +287,18 @@ if __name__ == "__main__":
         n_stocks=N_STOCKS,
         lr=LR
     )
-    print(f'----- Started training at: {datetime.now().strftime("%Y%m%d%H%M%S")} -----')
+
+    train_start_time = datetime.now().strftime("%Y%m%d%H%M%S")
+    print(f'----- Started training at: {train_start_time} -----')
     agent.train(train_env, total_timesteps=TOTAL_TIMESTEPS, update_timestep=UPDATE_TIMESTEP)
-    print(f'----- Finished training at: {datetime.now().strftime("%Y%m%d%H%M%S")} -----')
+    train_end_time = datetime.now().strftime("%Y%m%d%H%M%S")
+    # Convert the string times back to datetime objects
+    start_dt = datetime.strptime(train_start_time, "%Y%m%d%H%M%S")
+    end_dt = datetime.strptime(train_end_time, "%Y%m%d%H%M%S")
+    # Calculate the difference in minutes
+    minutes_difference = (end_dt - start_dt).total_seconds() / 60
+    print(f'----- Finished training at: {train_end_time}, took {minutes_difference} minutes -----')
+
 
     agent.lstm_pre.save(os.path.join(saved_models_path, 'lstm_pre.keras'))
     agent.actor.save(os.path.join(saved_models_path, 'lstm_actor.keras'))
