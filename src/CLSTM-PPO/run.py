@@ -1,14 +1,14 @@
 import os
 import glob
+import warnings
 from datetime import datetime
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
-from textblob.en import sentiment
-
 from gym_env import StockTradingEnv  # Make sure your StockTradingEnv accepts a 'data' dict
 from ppo_agent import PPOAgent
 from sklearn.preprocessing import MinMaxScaler
+import tensorflow as tf
 
 
 def compute_ema(series, span):
@@ -199,19 +199,22 @@ def compute_performance_metrics(portfolio_values):
 
 
 if __name__ == "__main__":
-    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' # 2 = INFO and WARNING messages are not printed (3 = ERROR messages are not printed)
+    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # Suppresses TensorFlow INFO & WARNING messages
+    warnings.filterwarnings("ignore")  # Suppresses Python warnings
+    tf.get_logger().setLevel('ERROR')  # Ensures TensorFlow's logger shows only errors
+
     curr_date = datetime.now().strftime("%Y%m%d%H")
 
     # Hyperparameters
     TIME_WINDOW = 30
-    SENTIMENT = "sentiment"  # or "no_sentiment", this edit state dimension accordingly
+    SENTIMENT = "no_sentiment"  # or "no_sentiment", this edit state dimension accordingly
     STATE_DIM = 1 + 30 * 7 if SENTIMENT == "sentiment" else 1 + 30 * 6 # 211 if sentiment, 181 if no_sentiment
     FEATURE_DIM = 128
     N_STOCKS = 30
     TOTAL_TIMESTEPS = 50000
     UPDATE_TIMESTEP = 128
     LR = 3e-4
-    DATA_FOLDER = f"datasets/data_{N_STOCKS}_{SENTIMENT}"
+    DATA_FOLDER = f"datasets/data_50"
     if not os.path.exists(DATA_FOLDER):
         raise FileNotFoundError(f"Data folder {DATA_FOLDER} does not exist.")
 
