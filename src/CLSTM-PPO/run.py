@@ -315,7 +315,7 @@ if __name__ == "__main__":
     # save portfolio values to CSV
     pd.Series(portfolio_values).to_csv(os.path.join(evaluations_path, 'portfolio_values.csv'))
     # save cr, mer, sr to TXT
-    with open(os.path.join(evaluations_path, f'performance_metrics_{SENTIMENT}'), "w") as f:
+    with open(os.path.join(evaluations_path, f'performance_metrics_{SENTIMENT}.txt'), "w") as f:
         f.write(f"Cumulative Return: {cr * 100:.2f}%\n")
         f.write(f"Maximum Earning Rate: {mer * 100:.2f}%\n")
         f.write(f"Sharpe Ratio: {sr:.2f}\n")
