@@ -5,7 +5,7 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
-from gym_env import StockTradingEnv  # Make sure your StockTradingEnv accepts a 'data' dict
+from gym_env import StockTradingEnv
 from ppo_agent import PPOAgent
 from sklearn.preprocessing import MinMaxScaler
 import tensorflow as tf

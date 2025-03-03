@@ -96,7 +96,6 @@ class StockTradingEnv(gym.Env):
 
     def step(self, agent_action):
         agent_action = np.clip(agent_action, -1, 1)
-        # this gave enormous negative cumulative returns
         # trade_shares = (agent_action * self.max_shares).astype(np.int32)
         trade_shares = np.nan_to_num(agent_action * self.max_shares, nan=0.0, posinf=self.max_shares,
                                      neginf=-self.max_shares).astype(np.int32)
