@@ -11,18 +11,18 @@ from lstm_critic import build_lstm_critic
 class PPOAgent:
     def __init__(self, time_window, state_dim, feature_dim, n_stocks,
                  lr=3e-4, gamma=0.99, clip_epsilon=0.2, gae_lambda=0.95):
-        self.time_window = time_window
-        self.state_dim = state_dim
-        self.feature_dim = feature_dim
-        self.n_stocks = n_stocks
-        self.gamma = gamma
-        self.clip_epsilon = clip_epsilon
-        self.gae_lambda = gae_lambda
+        self.time_window = time_window # Length of the state sequence
+        self.state_dim = state_dim # Dimensionality of the state vector
+        self.feature_dim = feature_dim # Dimensionality of the feature vector
+        self.n_stocks = n_stocks # Number of stocks in the portfolio
+        self.gamma = gamma # Discount factor
+        self.clip_epsilon = clip_epsilon # PPO clip parameter
+        self.gae_lambda = gae_lambda # Generalized Advantage Estimation parameter
 
         # Build cascaded networks
-        self.lstm_pre = build_lstm_pre(time_window, state_dim, feature_dim)
-        self.actor = build_lstm_actor(feature_dim, n_stocks)
-        self.critic = build_lstm_critic(feature_dim)
+        self.lstm_pre = build_lstm_pre(time_window, state_dim, feature_dim) # LSTM for feature extraction
+        self.actor = build_lstm_actor(feature_dim, n_stocks) # LSTM-based actor
+        self.critic = build_lstm_critic(feature_dim) # LSTM-based critic
 
         # Log standard deviation as a trainable parameter for the Gaussian policy.
         self.log_std = tf.Variable(initial_value=tf.zeros(n_stocks), trainable=True, name="log_std")

@@ -9,6 +9,7 @@ from gym_env import StockTradingEnv
 from ppo_agent import PPOAgent
 from sklearn.preprocessing import MinMaxScaler
 import tensorflow as tf
+from pathlib import Path
 
 
 def compute_ema(series, span):
@@ -199,41 +200,45 @@ def compute_performance_metrics(portfolio_values):
 
 
 if __name__ == "__main__":
-    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # Suppresses TensorFlow INFO & WARNING messages
-    warnings.filterwarnings("ignore")  # Suppresses Python warnings
-    tf.get_logger().setLevel('ERROR')  # Ensures TensorFlow's logger shows only errors
+    # Suppress TensorFlow and Python warnings
+    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+    warnings.filterwarnings("ignore")
+    tf.get_logger().setLevel('ERROR')
 
-    curr_date = datetime.now().strftime("%Y%m%d%H%M%S")
+    # Current date for directory naming
+    curr_date = datetime.now().strftime("%Y%m%d%H%M")
 
     # Hyperparameters
     TIME_WINDOW = 30
-    SENTIMENT = "no_sentiment"  # or "no_sentiment", this edit state dimension accordingly
-    STATE_DIM = 1 + 30 * 7 if SENTIMENT == "sentiment" else 1 + 30 * 6 # 211 if sentiment, 181 if no_sentiment
+    SENTIMENT = "sentiment"  # "sentiment" or "no_sentiment"
+    STATE_DIM = 1 + 30 * 7 if SENTIMENT == "sentiment" else 1 + 30 * 6
     FEATURE_DIM = 128
     N_STOCKS = 30
     TOTAL_TIMESTEPS = 50000
     UPDATE_TIMESTEP = 128
     LR = 3e-4
-    DATA_FOLDER = f"datasets/data_50"
-    if not os.path.exists(DATA_FOLDER):
-        raise FileNotFoundError(f"Data folder {DATA_FOLDER} does not exist.")
-
-    # environment settings
+    DATA_FOLDER = "datasets/data_50"
     INITIAL_BALANCE = 1e6
     MAX_SHARES = 1000
     REWARD_SCALING = 1e-2
     TURBULENCE_THRESHOLD = 100
 
-    # create folders for plots, saved models, and evaluations
-    plots_path = f'results/{SENTIMENT}_{N_STOCKS}_{curr_date}/plots'
-    saved_models_path = f'results/{SENTIMENT}_{N_STOCKS}_{curr_date}/saved_models'
-    evaluations_path = f'results/{SENTIMENT}_{N_STOCKS}_{curr_date}/evaluations'
-    if not os.path.exists(plots_path): os.makedirs(plots_path)
-    if not os.path.exists(saved_models_path): os.makedirs(saved_models_path)
-    if not os.path.exists(evaluations_path): os.makedirs(evaluations_path)
+    # Verify data folder exists
+    if not os.path.exists(DATA_FOLDER):
+        raise FileNotFoundError(f"Data folder {DATA_FOLDER} does not exist.")
 
-    # save the complete configuration in a file
-    with open(f'results/{SENTIMENT}_{N_STOCKS}_{curr_date}/config.txt', 'w') as f:
+    # Create directories for results
+    results_dir = f'results/{SENTIMENT}_{N_STOCKS}_{curr_date}'
+    plots_path = os.path.join(results_dir, 'plots')
+    saved_models_path = os.path.join(results_dir, 'saved_models')
+    evaluations_path = os.path.join(results_dir, 'evaluations')
+    os.makedirs(plots_path, exist_ok=True)
+    os.makedirs(saved_models_path, exist_ok=True)
+    os.makedirs(evaluations_path, exist_ok=True)
+
+    # Save configuration
+    config_path = os.path.join(results_dir, 'config.txt')
+    with open(config_path, 'w') as f:
         f.write(f'Time window: {TIME_WINDOW}\n'
                 f'Sentiment: {SENTIMENT}\n'
                 f'State dimension: {STATE_DIM}\n'
@@ -247,15 +252,15 @@ if __name__ == "__main__":
                 f'Reward scaling: {REWARD_SCALING}\n'
                 f'Turbulence threshold: {TURBULENCE_THRESHOLD}\n')
 
-    # print the configuration in the console through the file
+    # Display configuration
     print(f'----- Training with {N_STOCKS} stocks and sentiment: {SENTIMENT} -----')
-    with open(f'results/{SENTIMENT}_{N_STOCKS}_{curr_date}/config.txt', 'r') as f:
+    with open(config_path, 'r') as f:
         print(f.read())
 
     # Load data and create environments
     data = load_data(data_folder=DATA_FOLDER, n_stocks=N_STOCKS, sentiment=(SENTIMENT == "sentiment"))
     total_steps = data['price'].shape[0]
-    split_index = int(total_steps * 0.8)  # 80% in-sample, 20% out-of-sample
+    split_index = int(total_steps * 0.8)  # 80% training, 20% testing
 
     train_data = {k: v[:split_index] for k, v in data.items()}
     test_data = {k: v[split_index:] for k, v in data.items()}
@@ -280,6 +285,13 @@ if __name__ == "__main__":
         n_stocks=N_STOCKS,
         sentiment=(SENTIMENT == "sentiment")
     )
+
+    # Define model file paths
+    lstm_pre_path = Path(saved_models_path) / 'lstm_pre.keras'
+    actor_path = Path(saved_models_path) / 'lstm_actor.keras'
+    critic_path = Path(saved_models_path) / 'lstm_critic.keras'
+
+    # Initialize agent
     agent = PPOAgent(
         time_window=TIME_WINDOW,
         state_dim=STATE_DIM,
@@ -288,38 +300,55 @@ if __name__ == "__main__":
         lr=LR
     )
 
-    train_start_time = datetime.now().strftime("%Y%m%d%H%M%S")
-    print(f'----- Started training at: {train_start_time} -----')
-    agent.train(train_env, total_timesteps=TOTAL_TIMESTEPS, update_timestep=UPDATE_TIMESTEP)
-    train_end_time = datetime.now().strftime("%Y%m%d%H%M%S")
-    # Convert the string times back to datetime objects
-    start_dt = datetime.strptime(train_start_time, "%Y%m%d%H%M%S")
-    end_dt = datetime.strptime(train_end_time, "%Y%m%d%H%M%S")
-    # Calculate the difference in minutes
-    minutes_difference = (end_dt - start_dt).total_seconds() / 60
-    print(f'----- Finished training at: {train_end_time}, took {minutes_difference} minutes -----')
+    # Check if model files exist
+    if lstm_pre_path.exists() and actor_path.exists() and critic_path.exists():
+        # Load existing models
+        print('----- Loading existing models for evaluation -----')
+        agent.lstm_pre = tf.keras.models.load_model(lstm_pre_path)
+        agent.actor = tf.keras.models.load_model(actor_path)
+        agent.critic = tf.keras.models.load_model(critic_path)
+    else:
+        # Train models
+        train_start_time = datetime.now()
+        print(f'----- Started training at: {train_start_time.strftime("%Y-%m-%d %H:%M:%S")} -----')
+        agent.train(train_env, total_timesteps=TOTAL_TIMESTEPS, update_timestep=UPDATE_TIMESTEP)
+        train_end_time = datetime.now()
+        duration = (train_end_time - train_start_time).total_seconds() / 60
+        print(
+            f'----- Finished training at: {train_end_time.strftime("%Y-%m-%d %H:%M:%S")}, duration: {duration:.2f} minutes -----')
 
+        # Save models
+        agent.lstm_pre.save(lstm_pre_path)
+        agent.actor.save(actor_path)
+        agent.critic.save(critic_path)
 
-    agent.lstm_pre.save(os.path.join(saved_models_path, 'lstm_pre.keras'))
-    agent.actor.save(os.path.join(saved_models_path, 'lstm_actor.keras'))
-    agent.critic.save(os.path.join(saved_models_path, 'lstm_critic.keras'))
-
-    print(f'evaluating agent...')
+    # Evaluate the agent
+    print('----- Evaluating agent -----')
     portfolio_values = backtest_agent(agent, test_env, TIME_WINDOW)
     cr, mer, sr = compute_performance_metrics(portfolio_values)
+    metrics = test_env.get_metrics(portfolio_values)
 
     print(f"Cumulative Return: {cr * 100:.2f}%")
     print(f"Maximum Earning Rate: {mer * 100:.2f}%")
     print(f"Sharpe Ratio: {sr:.2f}")
+    # Display performance metrics
+    for metric, value in metrics.items():
+        print(f"{metric}: {value:.2f}")
 
-    # save portfolio values to CSV
-    pd.Series(portfolio_values).to_csv(os.path.join(evaluations_path, 'portfolio_values.csv'))
-    # save cr, mer, sr to TXT
-    with open(os.path.join(evaluations_path, f'performance_metrics_{SENTIMENT}.txt'), "w") as f:
+    # Save portfolio values to CSV
+    portfolio_values_path = os.path.join(evaluations_path, 'portfolio_values.csv')
+    pd.Series(portfolio_values).to_csv(portfolio_values_path)
+
+    # Save performance metrics to a text file
+    performance_metrics_path = os.path.join(evaluations_path, f'performance_metrics_{SENTIMENT}.txt')
+    with open(performance_metrics_path, "w") as f:
         f.write(f"Cumulative Return: {cr * 100:.2f}%\n")
         f.write(f"Maximum Earning Rate: {mer * 100:.2f}%\n")
         f.write(f"Sharpe Ratio: {sr:.2f}\n")
+        for metric, value in metrics.items():
+            f.write(f"{metric}: {value:.2f}\n")
 
+    # Plot and save portfolio value over time
     plt.figure(figsize=(10, 6))
     plt.plot(portfolio_values, label="Portfolio Value")
     plt.title("Portfolio Value Over Time")
@@ -330,22 +359,12 @@ if __name__ == "__main__":
     plt.savefig(os.path.join(plots_path, 'portfolio_value.png'))
     plt.show()
 
-    # Plot equity curve
-    plt.figure(figsize=(10, 6))
-    plt.plot(portfolio_values, label="Portfolio Value")
-    plt.title("Equity Curve")
-    plt.xlabel("Time Steps")
-    plt.ylabel("Portfolio Value")
-    plt.legend()
-    plt.grid(True)
-    plt.savefig(os.path.join(plots_path, 'equity_curve.png'))
-    plt.show()
-
-    # Compute drawdowns (percentage difference between a portfolio's value and its previous peak value)
+    # Compute drawdowns
     portfolio_series = pd.Series(portfolio_values)
     rolling_max = portfolio_series.cummax()
     drawdowns = (portfolio_series - rolling_max) / rolling_max
 
+    # Plot and save drawdowns
     plt.figure(figsize=(10, 6))
     plt.plot(drawdowns, label="Drawdown")
     plt.title("Portfolio Drawdown")
@@ -356,8 +375,10 @@ if __name__ == "__main__":
     plt.savefig(os.path.join(plots_path, 'portfolio_drawdown.png'))
     plt.show()
 
-    # Compute daily returns and plot histogram
+    # Compute daily returns
     daily_returns = np.diff(portfolio_values) / portfolio_values[:-1]
+
+    # Plot and save histogram of daily returns
     plt.figure(figsize=(10, 6))
     plt.hist(daily_returns, bins=30, edgecolor='k')
     plt.title("Histogram of Daily Returns")
@@ -367,8 +388,10 @@ if __name__ == "__main__":
     plt.savefig(os.path.join(plots_path, 'daily_returns_histogram.png'))
     plt.show()
 
-    # Rolling volatility (e.g., 30-day volatility)
+    # Compute rolling volatility (e.g., 30-day volatility)
     rolling_vol = portfolio_series.pct_change().rolling(window=30).std() * np.sqrt(252)
+
+    # Plot and save rolling volatility
     plt.figure(figsize=(10, 6))
     plt.plot(rolling_vol, label="Rolling 30-day Volatility")
     plt.title("Rolling Volatility")
@@ -378,4 +401,3 @@ if __name__ == "__main__":
     plt.grid(True)
     plt.savefig(os.path.join(plots_path, 'rolling_volatility.png'))
     plt.show()
-

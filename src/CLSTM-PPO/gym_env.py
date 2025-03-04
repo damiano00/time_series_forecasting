@@ -1,6 +1,7 @@
 import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score, median_absolute_error
 
 
 class StockTradingEnv(gym.Env):
@@ -24,6 +25,7 @@ class StockTradingEnv(gym.Env):
         self.data = data  # Data dictionary with keys: 'price', 'MACD', 'RSI', 'CCI', 'ADX'
         self.num_steps = self.data['price'].shape[0]
         self.initial_balance = initial_balance
+        self.portfolio_history = []
         self.max_shares = max_shares
         self.reward_scaling = reward_scaling
         self.turbulence_threshold = turbulence_threshold
@@ -96,10 +98,8 @@ class StockTradingEnv(gym.Env):
 
     def step(self, agent_action):
         agent_action = np.clip(agent_action, -1, 1)
-        # trade_shares = (agent_action * self.max_shares).astype(np.int32)
         trade_shares = np.nan_to_num(agent_action * self.max_shares, nan=0.0, posinf=self.max_shares,
                                      neginf=-self.max_shares).astype(np.int32)
-
         for i in range(self.n_stocks):
             price = self.prices[i]
             if trade_shares[i] > 0:  # Buy action
@@ -118,6 +118,7 @@ class StockTradingEnv(gym.Env):
         done = self.current_step >= self.num_steps - 1
         self._update_current_prices()
         current_value = self._get_portfolio_value()
+        self.portfolio_history.append(current_value)  # Track portfolio value
 
         reward = (current_value - prev_value) * self.reward_scaling
         turbulence = 0  # Placeholder for turbulence calculation
@@ -133,3 +134,58 @@ class StockTradingEnv(gym.Env):
         print(f"Balance: {self.balance:.2f}")
         print(f"Stock Owned: {self.stock_owned}")
         print(f"Portfolio Value: {portfolio_value:.2f}")
+
+    from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score, median_absolute_error
+    import numpy as np
+
+    def get_metrics(self, predicted_data):
+        """
+        Computes various metrics for model evaluation.
+
+        Args:
+            predicted_data (np.array): The predicted portfolio values.
+
+        Returns:
+            dict: Dictionary containing MAE, MSE, R² score, MAPE, MedAE, and sMAPE.
+        """
+        # Compute actual portfolio values
+        actual_values = np.array(self.portfolio_history)
+
+        # Ensure predicted_data and actual_values have the same length
+        min_len = min(len(predicted_data), len(actual_values))
+        predicted_data = predicted_data[:min_len]
+        actual_values = actual_values[:min_len]
+
+        # Mean Absolute Error
+        mae = mean_absolute_error(actual_values, predicted_data)
+
+        # Mean Squared Error
+        mse = mean_squared_error(actual_values, predicted_data)
+
+        # R² Score
+        r2 = r2_score(actual_values, predicted_data)
+
+        # Mean Absolute Percentage Error
+        def mean_absolute_percentage_error(y_true, y_pred):
+            return np.mean(np.abs((y_true - y_pred) / y_true)) * 100
+
+        mape = mean_absolute_percentage_error(actual_values, predicted_data)
+
+        # Median Absolute Error
+        medae = median_absolute_error(actual_values, predicted_data)
+
+        # Symmetric Mean Absolute Percentage Error
+        def symmetric_mean_absolute_percentage_error(y_true, y_pred):
+            return np.mean(2.0 * np.abs(y_true - y_pred) / (np.abs(y_true) + np.abs(y_pred))) * 100
+
+        smape = symmetric_mean_absolute_percentage_error(actual_values, predicted_data)
+
+        return {
+            'MAE': mae,
+            'MSE': mse,
+            'R²': r2,
+            'MAPE': mape,
+            'MedAE': medae,
+            'sMAPE': smape
+        }
+
