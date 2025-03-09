@@ -135,9 +135,6 @@ class StockTradingEnv(gym.Env):
         print(f"Stock Owned: {self.stock_owned}")
         print(f"Portfolio Value: {portfolio_value:.2f}")
 
-    from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score, median_absolute_error
-    import numpy as np
-
     def get_metrics(self, predicted_data):
         """
         Computes various metrics for model evaluation.

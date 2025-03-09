@@ -160,7 +160,7 @@ def main(configs, data_filename, sentiment_type, flag_pred, model_name, num_csvs
 
 if __name__ == '__main__':
     model_name = "LSTM"
-    sentiment_types = ["nonsentiment"]  # "sentiment",
+    sentiment_types = ["sentiment"]  # "sentiment",
     # Test csvs = 25
     # names = ['AAPL.csv', 'ABBV.csv', 'ACGLO.csv', 'AFGD.csv', 'AGM-A.csv', 'AKO-A.csv', 'AMD.csv', 'AMZN.csv', 'ARTLW.csv', 'BABA.csv', 'BCDAW.csv', 'BH-A.csv', 'BHFAL.csv', 'BRK-B.csv', 'BROGW.csv', 'C.csv', 'CIG-C.csv', 'CLSN.csv', 'COST.csv', 'CRD-A.csv', 'CVX.csv', 'DIS.csv', 'FDEV.csv', 'FITBO.csv', 'GAINL.csv', 'GE.csv', 'GECCM.csv', 'GOOG.csv', 'GRP-UN.csv', 'GTN-A.csv', 'HCXY.csv', 'HVT-A.csv', 'INBKZ.csv', 'INTC.csv', 'KO.csv', 'MSFT.csv', 'NVDA.csv', 'OCFCP.csv', 'PBR-A.csv', 'PYPL.csv', 'QQQ.csv', 'QVCD.csv', 'SBUX.csv', 'T.csv', 'TSLA.csv', 'TSM.csv', 'UCBIO.csv', 'WFC.csv', 'WMT.csv', 'WSO-B.csv']
 

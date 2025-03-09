@@ -176,16 +176,26 @@ def backtest_agent(agent, env, time_window):
     state = env.reset()
     state_seq = np.array([state] * time_window)
     portfolio_values = []
+    predicted_prices = []  # Store predicted stock prices
+    true_prices = []  # Store true stock prices
     done = False
     initial_portfolio = env.balance + np.sum(env.prices * env.stock_owned)
     portfolio_values.append(initial_portfolio)
     while not done:
         action, _, _ = agent.select_action(state_seq)
-        next_state, reward, done, _ = env.step(action)
+        next_state, _, done, _ = env.step(action)
+
         current_portfolio = env.balance + np.sum(env.prices * env.stock_owned)
         portfolio_values.append(current_portfolio)
+
+        # Store true stock prices and predicted actions
+        true_prices.append(env.prices.copy())
+        predicted_prices.append(action.copy())  # Store the predicted action output
+
+        # Update state sequence
         state_seq = np.vstack([state_seq[1:], next_state])
-    return portfolio_values
+
+    return portfolio_values, np.array(true_prices), np.array(predicted_prices)
 
 
 def compute_performance_metrics(portfolio_values):
@@ -208,20 +218,20 @@ if __name__ == "__main__":
     # Current date for directory naming
     curr_date = datetime.now().strftime("%Y%m%d%H%M")
 
-    # Hyperparameters
-    TIME_WINDOW = 30
-    SENTIMENT = "sentiment"  # "sentiment" or "no_sentiment"
+    # Hyperparameters (Optimized for Higher Cumulative Return)
+    TIME_WINDOW = 60  # Increased to capture longer trends
+    SENTIMENT = "sentiment"  # Keep as is if sentiment adds value
     STATE_DIM = 1 + 30 * 7 if SENTIMENT == "sentiment" else 1 + 30 * 6
-    FEATURE_DIM = 128
+    FEATURE_DIM = 256  # Increased to allow better feature representation
     N_STOCKS = 30
-    TOTAL_TIMESTEPS = 50000
-    UPDATE_TIMESTEP = 128
-    LR = 3e-4
+    TOTAL_TIMESTEPS = 100000  # Increased training duration for better convergence
+    UPDATE_TIMESTEP = 64  # More frequent updates to stabilize learning
+    LR = 5e-4  # Increased slightly for faster learning
     DATA_FOLDER = "datasets/data_50"
     INITIAL_BALANCE = 1e6
-    MAX_SHARES = 1000
-    REWARD_SCALING = 1e-2
-    TURBULENCE_THRESHOLD = 100
+    MAX_SHARES = 2000  # Increased to allow larger positions
+    REWARD_SCALING = 5e-3  # Adjusted for better reward signal balance
+    TURBULENCE_THRESHOLD = 150  # Increased to allow more trading in volatile markets
 
     # Verify data folder exists
     if not os.path.exists(DATA_FOLDER):
@@ -324,7 +334,9 @@ if __name__ == "__main__":
 
     # Evaluate the agent
     print('----- Evaluating agent -----')
-    portfolio_values = backtest_agent(agent, test_env, TIME_WINDOW)
+    portfolio_values, true_prices, predicted_prices = backtest_agent(agent, test_env, TIME_WINDOW)
+    np.save(os.path.join(evaluations_path, 'true_prices.npy'), true_prices)
+    np.save(os.path.join(evaluations_path, 'predicted_prices.npy'), predicted_prices)
     cr, mer, sr = compute_performance_metrics(portfolio_values)
     metrics = test_env.get_metrics(portfolio_values)
 
@@ -400,4 +412,30 @@ if __name__ == "__main__":
     plt.legend()
     plt.grid(True)
     plt.savefig(os.path.join(plots_path, 'rolling_volatility.png'))
+    plt.show()
+
+    # Load saved price data
+    true_prices = np.load(os.path.join(evaluations_path, 'true_prices.npy'))
+    predicted_prices = np.load(os.path.join(evaluations_path, 'predicted_prices.npy'))
+
+    # Choose a stock index for visualization
+    stock_idx = 0  # Change this to visualize a different stock
+
+    # Define x-axis for visualization
+    historical_length = len(true_prices) - len(predicted_prices)
+    x_hist = np.arange(historical_length)
+    x_future = np.arange(historical_length, historical_length + len(predicted_prices))
+
+    # Plot the stock forecasting results
+    plt.figure(figsize=(12, 6))
+    plt.plot(x_hist, true_prices[:historical_length, stock_idx], label="Historical Prices", color='blue')
+    plt.plot(x_future, true_prices[historical_length:, stock_idx], label="True Future Prices", color='green')
+    plt.plot(x_future, predicted_prices[:, stock_idx], label="Predicted Future Prices", color='red', linestyle="dashed")
+
+    plt.xlabel("Time Steps")
+    plt.ylabel("Stock Price")
+    plt.title(f"Stock Forecasting for Stock {stock_idx}")
+    plt.legend()
+    plt.grid(True)
+    plt.savefig(os.path.join(plots_path, f'stock_forecasting_{stock_idx}.png'))
     plt.show()
