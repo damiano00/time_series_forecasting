@@ -2,6 +2,7 @@ import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score, median_absolute_error
+from sklearn.preprocessing import MinMaxScaler
 
 
 class StockTradingEnv(gym.Env):
@@ -19,7 +20,7 @@ class StockTradingEnv(gym.Env):
     """
 
     def __init__(self, data, initial_balance=1e6, max_shares=100, reward_scaling=1e-4, turbulence_threshold=100,
-                 state_dim=211, sentiment=True, n_stocks=30):
+                 state_dim=211, sentiment=True, n_stocks=30, scaler=MinMaxScaler()):
         super(StockTradingEnv, self).__init__()
         self.n_stocks = n_stocks
         self.data = data  # Data dictionary with keys: 'price', 'MACD', 'RSI', 'CCI', 'ADX'
@@ -31,10 +32,11 @@ class StockTradingEnv(gym.Env):
         self.turbulence_threshold = turbulence_threshold
         self.state_dim = state_dim
         self.sentiment = sentiment
-
+        self.scaler = scaler
         self.balance = initial_balance
         self.stock_owned = np.zeros(self.n_stocks, dtype=np.int32)
         self.current_step = 0
+        self.stock_names = []
 
         self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(self.state_dim,), dtype=np.float32)
         self.action_space = spaces.Box(low=-1, high=1, shape=(self.n_stocks,), dtype=np.float32)
@@ -153,14 +155,9 @@ class StockTradingEnv(gym.Env):
         predicted_data = predicted_data[:min_len]
         actual_values = actual_values[:min_len]
 
-        # Mean Absolute Error
-        mae = mean_absolute_error(actual_values, predicted_data)
-
-        # Mean Squared Error
-        mse = mean_squared_error(actual_values, predicted_data)
-
-        # R² Score
-        r2 = r2_score(actual_values, predicted_data)
+        # Rescale back if prices were normalized using MinMaxScaler
+        actual_values = self.scaler.inverse_transform(actual_values.reshape(-1, 1)).flatten()
+        predicted_data = self.scaler.inverse_transform(np.array(predicted_data).reshape(-1, 1)).flatten()
 
         # Mean Absolute Percentage Error
         def mean_absolute_percentage_error(y_true, y_pred):
@@ -178,9 +175,6 @@ class StockTradingEnv(gym.Env):
         smape = symmetric_mean_absolute_percentage_error(actual_values, predicted_data)
 
         return {
-            'MAE': mae,
-            'MSE': mse,
-            'R²': r2,
             'MAPE': mape,
             'MedAE': medae,
             'sMAPE': smape

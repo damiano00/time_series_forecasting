@@ -9,6 +9,12 @@ from lstm_critic import build_lstm_critic
 
 
 class PPOAgent:
+    """
+    Proximal Policy Optimization (PPO) Agent with a cascaded architecture.
+    The agent uses an LSTM-based feature extractor (LSTMpre) to process a sequence of states,
+    and two LSTM-based networks for the actor and critic.
+    The actor outputs a Gaussian policy, and the critic outputs a state value estimate.
+    """
     def __init__(self, time_window, state_dim, feature_dim, n_stocks,
                  lr=3e-4, gamma=0.99, clip_epsilon=0.2, gae_lambda=0.95):
         self.time_window = time_window # Length of the state sequence

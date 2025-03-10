@@ -8,8 +8,10 @@ def build_lstm_pre(time_window, state_dim, feature_dim=128):
     and outputs a feature vector of dimension feature_dim.
 
     Architecture:
+      - Input: A sequence of states (time_window x state_dim).
       - One LSTM layer that processes the input sequence and returns its final hidden state.
       - Three Dense (linear) layers, each followed by a Tanh activation.
+      - Output: A feature vector of dimension feature_dim.
 
     Args:
       time_window (int): Number of time steps (length of the state sequence).
