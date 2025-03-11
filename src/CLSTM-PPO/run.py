@@ -4,12 +4,14 @@ import warnings
 from datetime import datetime
 import numpy as np
 import pandas as pd
-from matplotlib import pyplot as plt
 from gym_env import StockTradingEnv
 from ppo_agent import PPOAgent
 from sklearn.preprocessing import MinMaxScaler
 import tensorflow as tf
 from pathlib import Path
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+
+scaler = MinMaxScaler()
 
 
 def compute_ema(series, span):
@@ -64,30 +66,6 @@ def compute_adx(df, window=14):
     return adx
 
 
-def load_data(data_folder, n_stocks=30, sentiment=True):
-    """
-    Loads CSV files from the given folder, computes technical indicators (price, MACD, RSI, CCI, ADX)
-    for each stock, aligns them by common dates, and returns a dictionary of NumPy arrays:
-      - Each array has shape (num_timesteps, n_stocks)
-    """
-    check_stock_dates(data_folder)
-    indicators = get_indicators(data_folder, sentiment=sentiment)
-    common_index = determine_index_range(indicators)
-    print(f"Common date range: {common_index[0]} to {common_index[-1]}")
-    combined = {}
-    for ind in indicators:
-        df_list = []
-        for key in sorted(indicators[ind].keys())[:n_stocks]:
-            s = indicators[ind][key].reindex(common_index).ffill().bfill()
-            df_list.append(s)
-        combined[ind] = pd.concat(df_list, axis=1)
-        combined[ind].columns = sorted(indicators[ind].keys())[:n_stocks]
-    if len(common_index) == 0:
-        raise ValueError("No common dates found among CSV files.")
-    data_arrays = {ind: combined[ind].values for ind in combined}
-    return data_arrays
-
-
 def check_stock_dates(folder_path):
     csv_files = glob.glob(os.path.join(folder_path, '*.csv'))
     if not csv_files:
@@ -131,7 +109,6 @@ def get_indicators(data_folder, sentiment):
         df['date'] = pd.to_datetime(df['date']).dt.date
         df.sort_values('date', inplace=True)
         df.set_index('date', inplace=True)
-        scaler = MinMaxScaler()
         df['adj_close'] = scaler.fit_transform(df['adj_close'].values.reshape(-1, 1)).flatten()
         price = df['adj_close']
         macd = compute_macd(df, price_col='adj_close')
@@ -172,15 +149,45 @@ def determine_index_range(indicators):
     return pd.date_range(start=common_start, end=common_end, freq='D')
 
 
+def load_data(data_folder, n_stocks=30, sentiment=True):
+    """
+    Loads CSV files from the given folder, computes technical indicators (price, MACD, RSI, CCI, ADX)
+    for each stock, aligns them by common dates, and returns a dictionary of NumPy arrays:
+      - Each array has shape (num_timesteps, n_stocks)
+    """
+    check_stock_dates(data_folder)
+    indicators = get_indicators(data_folder, sentiment=sentiment)
+    common_index = determine_index_range(indicators)
+    print(f"Common date range: {common_index[0]} to {common_index[-1]}")
+    combined = {}
+    for ind in indicators:
+        df_list = []
+        for key in sorted(indicators[ind].keys())[:n_stocks]:
+            s = indicators[ind][key].reindex(common_index).ffill().bfill()
+            df_list.append(s)
+        combined[ind] = pd.concat(df_list, axis=1)
+        combined[ind].columns = sorted(indicators[ind].keys())[:n_stocks]
+    if len(common_index) == 0:
+        raise ValueError("No common dates found among CSV files.")
+    data_arrays = {ind: combined[ind].values for ind in combined}
+    return data_arrays
+
+
 def backtest_agent(agent, env, time_window):
+    # Retrieve historical prices from the dataset before forecasting starts
+    historical_prices = env.data['price'][:env.current_step]  # FIX: Correct historical price retrieval
+
     state = env.reset()
     state_seq = np.array([state] * time_window)
     portfolio_values = []
-    predicted_prices = []  # Store predicted stock prices
     true_prices = []  # Store true stock prices
+    predicted_prices = []  # Store predicted stock prices
     done = False
+
+    # Track portfolio from start
     initial_portfolio = env.balance + np.sum(env.prices * env.stock_owned)
     portfolio_values.append(initial_portfolio)
+
     while not done:
         action, _, _ = agent.select_action(state_seq)
         next_state, _, done, _ = env.step(action)
@@ -188,14 +195,21 @@ def backtest_agent(agent, env, time_window):
         current_portfolio = env.balance + np.sum(env.prices * env.stock_owned)
         portfolio_values.append(current_portfolio)
 
-        # Store true stock prices and predicted actions
+        # Store true prices AFTER executing the action
         true_prices.append(env.prices.copy())
-        predicted_prices.append(action.copy())  # Store the predicted action output
+
+        # FIX: Scale predicted prices properly
+        predicted_prices.append(env.prices * (1 + 0.05 * action))  # Smaller action scaling
 
         # Update state sequence
         state_seq = np.vstack([state_seq[1:], next_state])
 
-    return portfolio_values, np.array(true_prices), np.array(predicted_prices)
+    return (
+        portfolio_values,
+        np.array(historical_prices),  # FIX: Return correct historical prices
+        np.array(true_prices),
+        np.array(predicted_prices),
+    )
 
 
 def compute_performance_metrics(portfolio_values):
@@ -209,43 +223,37 @@ def compute_performance_metrics(portfolio_values):
     return cumulative_return, max_earning_rate, sharpe_ratio
 
 
-if __name__ == "__main__":
+def main(stocks, sentiment):
     # Suppress TensorFlow and Python warnings
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
     warnings.filterwarnings("ignore")
     tf.get_logger().setLevel('ERROR')
-
     # Current date for directory naming
     curr_date = datetime.now().strftime("%Y%m%d%H%M")
-
-    # Hyperparameters (Optimized for Higher Cumulative Return)
-    TIME_WINDOW = 60  # Increased to capture longer trends
-    SENTIMENT = "sentiment"  # Keep as is if sentiment adds value
-    STATE_DIM = 1 + 30 * 7 if SENTIMENT == "sentiment" else 1 + 30 * 6
-    FEATURE_DIM = 256  # Increased to allow better feature representation
-    N_STOCKS = 30
-    TOTAL_TIMESTEPS = 100000  # Increased training duration for better convergence
-    UPDATE_TIMESTEP = 64  # More frequent updates to stabilize learning
-    LR = 5e-4  # Increased slightly for faster learning
+    # Hyperparameters
+    TIME_WINDOW = 60
+    SENTIMENT = sentiment
+    N_STOCKS = stocks
+    STATE_DIM = 1 + N_STOCKS * 7 if SENTIMENT == "sentiment" else 1 + N_STOCKS * 6
+    FEATURE_DIM = 256
+    TOTAL_TIMESTEPS = 10000
+    UPDATE_TIMESTEP = 64
+    LR = 5e-4  # Stabilized learning rate
     DATA_FOLDER = "datasets/data_50"
     INITIAL_BALANCE = 1e6
-    MAX_SHARES = 2000  # Increased to allow larger positions
-    REWARD_SCALING = 5e-3  # Adjusted for better reward signal balance
-    TURBULENCE_THRESHOLD = 150  # Increased to allow more trading in volatile markets
+    MAX_SHARES = 2000
+    REWARD_SCALING = 5e-3
+    TURBULENCE_THRESHOLD = 150
 
     # Verify data folder exists
     if not os.path.exists(DATA_FOLDER):
         raise FileNotFoundError(f"Data folder {DATA_FOLDER} does not exist.")
-
     # Create directories for results
     results_dir = f'results/{SENTIMENT}_{N_STOCKS}_{curr_date}'
-    plots_path = os.path.join(results_dir, 'plots')
     saved_models_path = os.path.join(results_dir, 'saved_models')
     evaluations_path = os.path.join(results_dir, 'evaluations')
-    os.makedirs(plots_path, exist_ok=True)
     os.makedirs(saved_models_path, exist_ok=True)
     os.makedirs(evaluations_path, exist_ok=True)
-
     # Save configuration
     config_path = os.path.join(results_dir, 'config.txt')
     with open(config_path, 'w') as f:
@@ -261,7 +269,6 @@ if __name__ == "__main__":
                 f'Max shares: {MAX_SHARES}\n'
                 f'Reward scaling: {REWARD_SCALING}\n'
                 f'Turbulence threshold: {TURBULENCE_THRESHOLD}\n')
-
     # Display configuration
     print(f'----- Training with {N_STOCKS} stocks and sentiment: {SENTIMENT} -----')
     with open(config_path, 'r') as f:
@@ -283,7 +290,8 @@ if __name__ == "__main__":
         turbulence_threshold=TURBULENCE_THRESHOLD,
         state_dim=STATE_DIM,
         n_stocks=N_STOCKS,
-        sentiment=(SENTIMENT == "sentiment")
+        sentiment=(SENTIMENT == "sentiment"),
+        scaler=scaler
     )
     test_env = StockTradingEnv(
         data=test_data,
@@ -293,7 +301,8 @@ if __name__ == "__main__":
         turbulence_threshold=TURBULENCE_THRESHOLD,
         state_dim=STATE_DIM,
         n_stocks=N_STOCKS,
-        sentiment=(SENTIMENT == "sentiment")
+        sentiment=(SENTIMENT == "sentiment"),
+        scaler=scaler
     )
 
     # Define model file paths
@@ -309,7 +318,6 @@ if __name__ == "__main__":
         n_stocks=N_STOCKS,
         lr=LR
     )
-
     # Check if model files exist
     if lstm_pre_path.exists() and actor_path.exists() and critic_path.exists():
         # Load existing models
@@ -326,7 +334,6 @@ if __name__ == "__main__":
         duration = (train_end_time - train_start_time).total_seconds() / 60
         print(
             f'----- Finished training at: {train_end_time.strftime("%Y-%m-%d %H:%M:%S")}, duration: {duration:.2f} minutes -----')
-
         # Save models
         agent.lstm_pre.save(lstm_pre_path)
         agent.actor.save(actor_path)
@@ -334,108 +341,49 @@ if __name__ == "__main__":
 
     # Evaluate the agent
     print('----- Evaluating agent -----')
-    portfolio_values, true_prices, predicted_prices = backtest_agent(agent, test_env, TIME_WINDOW)
+    portfolio_values, historical_prices, true_prices, predicted_prices = backtest_agent(agent, test_env, TIME_WINDOW)
+    # Save evaluation results also with the stock names
     np.save(os.path.join(evaluations_path, 'true_prices.npy'), true_prices)
     np.save(os.path.join(evaluations_path, 'predicted_prices.npy'), predicted_prices)
     cr, mer, sr = compute_performance_metrics(portfolio_values)
-    metrics = test_env.get_metrics(portfolio_values)
-
-    print(f"Cumulative Return: {cr * 100:.2f}%")
-    print(f"Maximum Earning Rate: {mer * 100:.2f}%")
-    print(f"Sharpe Ratio: {sr:.2f}")
-    # Display performance metrics
-    for metric, value in metrics.items():
-        print(f"{metric}: {value:.2f}")
 
     # Save portfolio values to CSV
     portfolio_values_path = os.path.join(evaluations_path, 'portfolio_values.csv')
     pd.Series(portfolio_values).to_csv(portfolio_values_path)
 
     # Save performance metrics to a text file
-    performance_metrics_path = os.path.join(evaluations_path, f'performance_metrics_{SENTIMENT}.txt')
+    performance_metrics_path = os.path.join(evaluations_path, f'performance_metrics_{SENTIMENT}_{N_STOCKS}.txt')
     with open(performance_metrics_path, "w") as f:
         f.write(f"Cumulative Return: {cr * 100:.2f}%\n")
         f.write(f"Maximum Earning Rate: {mer * 100:.2f}%\n")
         f.write(f"Sharpe Ratio: {sr:.2f}\n")
-        for metric, value in metrics.items():
-            f.write(f"{metric}: {value:.2f}\n")
 
-    # Plot and save portfolio value over time
-    plt.figure(figsize=(10, 6))
-    plt.plot(portfolio_values, label="Portfolio Value")
-    plt.title("Portfolio Value Over Time")
-    plt.xlabel("Time Steps")
-    plt.ylabel("Portfolio Value")
-    plt.legend()
-    plt.grid(True)
-    plt.savefig(os.path.join(plots_path, 'portfolio_value.png'))
-    plt.show()
-
-    # Compute drawdowns
-    portfolio_series = pd.Series(portfolio_values)
-    rolling_max = portfolio_series.cummax()
-    drawdowns = (portfolio_series - rolling_max) / rolling_max
-
-    # Plot and save drawdowns
-    plt.figure(figsize=(10, 6))
-    plt.plot(drawdowns, label="Drawdown")
-    plt.title("Portfolio Drawdown")
-    plt.xlabel("Time Steps")
-    plt.ylabel("Drawdown (%)")
-    plt.legend()
-    plt.grid(True)
-    plt.savefig(os.path.join(plots_path, 'portfolio_drawdown.png'))
-    plt.show()
-
-    # Compute daily returns
-    daily_returns = np.diff(portfolio_values) / portfolio_values[:-1]
-
-    # Plot and save histogram of daily returns
-    plt.figure(figsize=(10, 6))
-    plt.hist(daily_returns, bins=30, edgecolor='k')
-    plt.title("Histogram of Daily Returns")
-    plt.xlabel("Daily Return")
-    plt.ylabel("Frequency")
-    plt.grid(True)
-    plt.savefig(os.path.join(plots_path, 'daily_returns_histogram.png'))
-    plt.show()
-
-    # Compute rolling volatility (e.g., 30-day volatility)
-    rolling_vol = portfolio_series.pct_change().rolling(window=30).std() * np.sqrt(252)
-
-    # Plot and save rolling volatility
-    plt.figure(figsize=(10, 6))
-    plt.plot(rolling_vol, label="Rolling 30-day Volatility")
-    plt.title("Rolling Volatility")
-    plt.xlabel("Time Steps")
-    plt.ylabel("Volatility")
-    plt.legend()
-    plt.grid(True)
-    plt.savefig(os.path.join(plots_path, 'rolling_volatility.png'))
-    plt.show()
-
-    # Load saved price data
+    # Load stored price data
     true_prices = np.load(os.path.join(evaluations_path, 'true_prices.npy'))
     predicted_prices = np.load(os.path.join(evaluations_path, 'predicted_prices.npy'))
 
-    # Choose a stock index for visualization
-    stock_idx = 0  # Change this to visualize a different stock
+    with open(os.path.join(evaluations_path, 'stock_metrics.csv'), 'w') as f:
+        f.write("Stock,MAE,MSE,R²\n")
+        for stock_idx in range(N_STOCKS):
+            mae = mean_absolute_error(true_prices[:, stock_idx], predicted_prices[:, stock_idx])
+            mse = mean_squared_error(true_prices[:, stock_idx], predicted_prices[:, stock_idx])
+            r2 = r2_score(true_prices[:, stock_idx], predicted_prices[:, stock_idx])
+            f.write(f"{stock_idx},{mae},{mse},{r2}\n")
 
-    # Define x-axis for visualization
-    historical_length = len(true_prices) - len(predicted_prices)
-    x_hist = np.arange(historical_length)
-    x_future = np.arange(historical_length, historical_length + len(predicted_prices))
+    # Calculate average metrics
+    mae_avg = np.mean([mean_absolute_error(true_prices[:, i], predicted_prices[:, i]) for i in range(N_STOCKS)])
+    mse_avg = np.mean([mean_squared_error(true_prices[:, i], predicted_prices[:, i]) for i in range(N_STOCKS)])
+    r2_avg = np.mean([r2_score(true_prices[:, i], predicted_prices[:, i]) for i in range(N_STOCKS)])
 
-    # Plot the stock forecasting results
-    plt.figure(figsize=(12, 6))
-    plt.plot(x_hist, true_prices[:historical_length, stock_idx], label="Historical Prices", color='blue')
-    plt.plot(x_future, true_prices[historical_length:, stock_idx], label="True Future Prices", color='green')
-    plt.plot(x_future, predicted_prices[:, stock_idx], label="Predicted Future Prices", color='red', linestyle="dashed")
+    # Save average metrics to a text file
+    stock_metrics_path = os.path.join(evaluations_path, 'stock_metrics.txt')
+    with open(stock_metrics_path, "w") as f:
+        f.write(f"Average MAE: {mae_avg}\n")
+        f.write(f"Average MSE: {mse_avg}\n")
+        f.write(f"Average R²: {r2_avg}\n")
 
-    plt.xlabel("Time Steps")
-    plt.ylabel("Stock Price")
-    plt.title(f"Stock Forecasting for Stock {stock_idx}")
-    plt.legend()
-    plt.grid(True)
-    plt.savefig(os.path.join(plots_path, f'stock_forecasting_{stock_idx}.png'))
-    plt.show()
+
+if __name__ == '__main__':
+    for n_stocks in [5, 25, 48]:
+        main(stocks=n_stocks, sentiment='sentiment')
+        main(stocks=n_stocks, sentiment='no_sentiment')

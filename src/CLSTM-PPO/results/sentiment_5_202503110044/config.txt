@@ -1,0 +1,12 @@
+Time window: 60
+Sentiment: sentiment
+State dimension: 36
+Feature dimension: 256
+Number of stocks: 5
+Total timesteps: 100000
+Update timestep: 64
+Learning rate: 0.0005
+Initial balance: 1000000.0
+Max shares: 2000
+Reward scaling: 0.005
+Turbulence threshold: 150

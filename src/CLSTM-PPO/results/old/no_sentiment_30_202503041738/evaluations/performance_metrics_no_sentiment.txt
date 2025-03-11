@@ -1,0 +1,9 @@
+Cumulative Return: 3.73%
+Maximum Earning Rate: 3.78%
+Sharpe Ratio: 3.60
+MAE: 1396.59 mean absolute error
+MSE: 4831485.20 mean squared error
+R²: 0.96
+MAPE: 0.14 mean absolute percentage error
+MedAE: 605.29 median absolute error
+sMAPE: 0.14 symmetric mean absolute percentage error

@@ -1,9 +1,0 @@
-Cumulative Return: 7.77%
-Maximum Earning Rate: 7.77%
-Sharpe Ratio: 4.71
-MAE: 2105.61
-MSE: 12391734.13
-R²: 0.97
-MAPE: 0.21
-MedAE: 958.54
-sMAPE: 0.21
