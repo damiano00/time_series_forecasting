@@ -1,8 +1,8 @@
-from tensorflow.keras.layers import Input, LSTM, Dense, Reshape
+from tensorflow.keras.layers import Input, LSTM, Dense, Reshape, Dropout
 from tensorflow.keras.models import Model
 
 
-def build_lstm_critic(feature_dim=128):
+def build_lstm_critic(feature_dim=128, dropout=0.3):
     """
     LSTM Critic Network for PPO.
 
@@ -15,6 +15,7 @@ def build_lstm_critic(feature_dim=128):
 
     Args:
       feature_dim (int): Dimensionality of the input feature vector (default: 128).
+      dropout (float): Dropout rate for the LSTM layer (default: 0.3).
 
     Returns:
       model (tf.keras.Model): The LSTM Critic model.
@@ -26,7 +27,8 @@ def build_lstm_critic(feature_dim=128):
     x = Reshape((1, feature_dim), name="reshape_for_lstm")(inputs)
 
     # LSTM layer with 128 units, processing the sequence and outputting the final hidden state
-    x = LSTM(units=128, activation='tanh', name="critic_lstm")(x)
+    x = LSTM(units=128, activation='tanh', name="critic_lstm", dropout=dropout)(x)
+    x = Dropout(dropout, name="critic_dropout")(x)  # Added dropout
 
     # Three dense layers with Tanh activation
     x = Dense(128, activation='tanh', name="critic_dense1")(x)

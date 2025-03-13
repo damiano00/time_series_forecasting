@@ -1,8 +1,9 @@
 import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score, median_absolute_error
+from sklearn.metrics import median_absolute_error
 from sklearn.preprocessing import MinMaxScaler
+from scipy.spatial.distance import mahalanobis
 
 
 class StockTradingEnv(gym.Env):
@@ -37,12 +38,10 @@ class StockTradingEnv(gym.Env):
         self.stock_owned = np.zeros(self.n_stocks, dtype=np.int32)
         self.current_step = 0
         self.stock_names = []
-
+        self.past_returns = []
         self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(self.state_dim,), dtype=np.float32)
         self.action_space = spaces.Box(low=-1, high=1, shape=(self.n_stocks,), dtype=np.float32)
-
         self.transaction_cost_pct = 0.001  # 0.1% transaction cost
-
         self._update_current_prices()
 
     def reset(self, seed=None, options=None):
@@ -98,6 +97,27 @@ class StockTradingEnv(gym.Env):
         # Calculate portfolio value as balance plus value of holdings.
         return self.balance + np.dot(self.stock_owned, self.prices)
 
+    def calculate_turbulence(self, current_returns):
+        """
+        Computes the turbulence index using the Mahalanobis distance.
+        """
+        if len(self.past_returns) < 30:  # Need at least 30 past days for a stable covariance matrix
+            return 0  # No turbulence in the early phase
+
+        # Convert past returns to NumPy array
+        past_returns_array = np.array(self.past_returns[-30:])  # Last 30 days of data
+
+        # Compute mean and covariance of historical returns
+        mean_returns = np.mean(past_returns_array, axis=0)
+        cov_matrix = np.cov(past_returns_array.T)
+
+        # Regularization: Ensure covariance matrix is invertible
+        cov_matrix += np.eye(cov_matrix.shape[0]) * 1e-6
+
+        # Compute Mahalanobis distance (turbulence)
+        turbulence = mahalanobis(current_returns, mean_returns, np.linalg.inv(cov_matrix))
+        return turbulence
+
     def step(self, agent_action):
         agent_action = np.clip(agent_action, -1, 1)
         trade_shares = np.nan_to_num(agent_action * self.max_shares, nan=0.0, posinf=self.max_shares,
@@ -123,7 +143,11 @@ class StockTradingEnv(gym.Env):
         self.portfolio_history.append(current_value)  # Track portfolio value
 
         reward = (current_value - prev_value) * self.reward_scaling
-        turbulence = 0  # Placeholder for turbulence calculation
+        # penalize high volatility (Stronger penalty for excessive trading)
+        reward = (current_value - prev_value) * self.reward_scaling
+        reward -= 1e-3 * np.abs(np.mean(agent_action))  # Reduce weak trades
+        reward += 0.01 * np.sign(current_value - prev_value)  # Encourage bigger profits
+        turbulence = self.calculate_turbulence(self.past_returns)
         if turbulence > self.turbulence_threshold:
             done = True
 
@@ -156,8 +180,13 @@ class StockTradingEnv(gym.Env):
         actual_values = actual_values[:min_len]
 
         # Rescale back if prices were normalized using MinMaxScaler
-        actual_values = self.scaler.inverse_transform(actual_values.reshape(-1, 1)).flatten()
-        predicted_data = self.scaler.inverse_transform(np.array(predicted_data).reshape(-1, 1)).flatten()
+        actual_values = self.scaler.inverse_transform(
+            np.array(actual_values).reshape(-1, 1)
+        ).flatten()
+
+        predicted_data = self.scaler.inverse_transform(
+            np.array(predicted_data).reshape(-1, 1)
+        ).flatten()
 
         # Mean Absolute Percentage Error
         def mean_absolute_percentage_error(y_true, y_pred):

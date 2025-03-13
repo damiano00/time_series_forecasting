@@ -6,13 +6,12 @@ import numpy as np
 import pandas as pd
 from gym_env import StockTradingEnv
 from ppo_agent import PPOAgent
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import StandardScaler
 import tensorflow as tf
 from pathlib import Path
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
-scaler = MinMaxScaler()
-
+scaler = StandardScaler()
 
 def compute_ema(series, span):
     return series.ewm(span=span, adjust=False).mean()
@@ -109,7 +108,10 @@ def get_indicators(data_folder, sentiment):
         df['date'] = pd.to_datetime(df['date']).dt.date
         df.sort_values('date', inplace=True)
         df.set_index('date', inplace=True)
-        df['adj_close'] = scaler.fit_transform(df['adj_close'].values.reshape(-1, 1)).flatten()
+        # df['adj_close'] = scaler.fit_transform(df['adj_close'].values.reshape(-1, 1)).flatten()
+        df[['open', 'high', 'low', 'close', 'adj_close']] = scaler.fit_transform(
+            df[['open', 'high', 'low', 'close', 'adj_close']]
+        )
         price = df['adj_close']
         macd = compute_macd(df, price_col='adj_close')
         rsi = compute_rsi(df, price_col='adj_close')
@@ -231,18 +233,18 @@ def main(stocks, sentiment):
     # Current date for directory naming
     curr_date = datetime.now().strftime("%Y%m%d%H%M")
     # Hyperparameters
-    TIME_WINDOW = 60
+    TIME_WINDOW = 15 # Number of timesteps to consider for each state
     SENTIMENT = sentiment
     N_STOCKS = stocks
     STATE_DIM = 1 + N_STOCKS * 7 if SENTIMENT == "sentiment" else 1 + N_STOCKS * 6
-    FEATURE_DIM = 256
-    TOTAL_TIMESTEPS = 10000
-    UPDATE_TIMESTEP = 64
-    LR = 5e-4  # Stabilized learning rate
+    FEATURE_DIM = 64
+    TOTAL_TIMESTEPS = 50000
+    UPDATE_TIMESTEP = 256
+    LR = 1e-4
     DATA_FOLDER = "datasets/data_50"
     INITIAL_BALANCE = 1e6
     MAX_SHARES = 2000
-    REWARD_SCALING = 5e-3
+    REWARD_SCALING = 1e-3
     TURBULENCE_THRESHOLD = 150
 
     # Verify data folder exists

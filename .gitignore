@@ -785,3 +785,5 @@ $RECYCLE.BIN/
 /src/CLSTM-PPO/datasets/Stock_news
 /src/CLSTM-PPO/datasets/Stock_price
 /src/CLSTM-PPO/ts_example/
+# exclude Zone.Identifier files
+**/Zone.Identifier

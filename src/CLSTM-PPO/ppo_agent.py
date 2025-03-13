@@ -16,7 +16,7 @@ class PPOAgent:
     The actor outputs a Gaussian policy, and the critic outputs a state value estimate.
     """
     def __init__(self, time_window, state_dim, feature_dim, n_stocks,
-                 lr=3e-4, gamma=0.99, clip_epsilon=0.2, gae_lambda=0.95):
+                 lr=3e-4, gamma=0.95, clip_epsilon=0.1, gae_lambda=0.9):
         self.time_window = time_window # Length of the state sequence
         self.state_dim = state_dim # Dimensionality of the state vector
         self.feature_dim = feature_dim # Dimensionality of the feature vector
@@ -31,7 +31,7 @@ class PPOAgent:
         self.critic = build_lstm_critic(feature_dim) # LSTM-based critic
 
         # Log standard deviation as a trainable parameter for the Gaussian policy.
-        self.log_std = tf.Variable(initial_value=tf.zeros(n_stocks), trainable=True, name="log_std")
+        self.log_std = tf.Variable(initial_value=tf.ones(n_stocks) * -1.0, trainable=True, name="log_std")
 
         # Use a single optimizer for simplicity.
         self.optimizer = Adam(lr)

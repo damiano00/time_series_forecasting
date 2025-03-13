@@ -6,11 +6,11 @@ if not os.path.exists('plots_comparison'):
     os.makedirs('plots_comparison')
 
 # Load stored price data
-true_prices = np.load('sentiment_48_202503110339/evaluations/true_prices.npy')
-predicted_prices_sen = np.load('sentiment_48_202503110339/evaluations/predicted_prices.npy')
-predicted_prices_non_sen = np.load('no_sentiment_48_202503110424/evaluations/predicted_prices.npy')
+true_prices = np.load('no_sentiment_5_202503130111/evaluations/true_prices.npy')
+predicted_prices_sen = np.load('sentiment_5_202503130047/evaluations/predicted_prices.npy')
+predicted_prices_non_sen = np.load('no_sentiment_5_202503130111/evaluations/predicted_prices.npy')
 
-stock_idx = 0
+stock_idx = 1
 
 # Plot stock forecasting
 plt.figure(figsize=(12, 6))
@@ -20,8 +20,8 @@ plt.plot(predicted_prices_non_sen[:, stock_idx], label="Predicted not using sent
 
 plt.xlabel("Time Steps")
 plt.ylabel("Stock Price")
-plt.title(f"Stock Forecasting for AAL")
+plt.title(f"Stock Forecasting for AAPL")
 plt.legend()
 plt.grid(True)
-plt.savefig('plots_comparison/stock_forecasting_AAL_48.png')
+plt.savefig('plots_comparison/stock_forecasting_AAPL_5.png')
 plt.show()

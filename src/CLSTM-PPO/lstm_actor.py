@@ -1,10 +1,10 @@
-from tensorflow.keras.layers import Input, LSTM, Dense, Reshape
+from tensorflow.keras.layers import Input, LSTM, Dense, Reshape, Dropout
 from tensorflow.keras.models import Model
 
 
-def build_lstm_actor(feature_dim=128, n_stocks=30):
+def build_lstm_actor(feature_dim=128, n_stocks=30, dropout=0.3):
     """
-    LSTM Actor Network for PPO.
+    LSTM Actor Network for PPO. It outputs a continuous action vector for a portfolio of stocks.
 
     Architecture:
       - Input: A feature vector (output of LSTMpre) of dimension `feature_dim`.
@@ -17,6 +17,7 @@ def build_lstm_actor(feature_dim=128, n_stocks=30):
     Args:
       feature_dim (int): Dimensionality of the input feature vector (default 128).
       n_stocks (int): Number of stocks, i.e., the dimension of the action output (default 30).
+      dropout (float): Dropout rate for the LSTM layer (default 0.2).
 
     Returns:
       model (tf.keras.Model): The LSTM Actor network.
@@ -27,8 +28,9 @@ def build_lstm_actor(feature_dim=128, n_stocks=30):
     # Reshape input to have a time dimension (sequence length = 1)
     x = Reshape((1, feature_dim), name="reshape_for_lstm")(inputs)
 
-    # LSTM layer with 128 hidden units; returns the final hidden state
-    x = LSTM(units=128, activation='tanh', name="actor_lstm")(x)
+    # LSTM layer with 256 hidden units; returns the final hidden state
+    x = LSTM(units=256, activation='tanh', name="actor_lstm", dropout=dropout)(x)
+    x = Dropout(dropout, name="actor_dropout")(x)  # Added dropout
 
     # Three Dense layers with Tanh activation for further processing
     x = Dense(128, activation='tanh', name="actor_dense1")(x)
