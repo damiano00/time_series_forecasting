@@ -10,6 +10,7 @@ def build_lstm_critic(feature_dim=128, dropout=0.3):
       - Input: A feature vector (from LSTMpre) with dimension `feature_dim`.
       - Reshape: Convert the feature vector into a sequence of length 1.
       - LSTM layer: Process the sequence with 128 hidden units.
+      - Dropout layer: Dropout with rate `dropout`.
       - Three Dense layers with Tanh activations.
       - Final Dense layer with linear activation to output a scalar value estimate.
 

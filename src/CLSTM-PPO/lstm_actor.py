@@ -10,6 +10,7 @@ def build_lstm_actor(feature_dim=128, n_stocks=30, dropout=0.3):
       - Input: A feature vector (output of LSTMpre) of dimension `feature_dim`.
       - Reshape: Convert the feature vector to a sequence of length 1 to allow LSTM processing.
       - LSTM layer: Processes the input sequence and outputs a 128-dimensional hidden state.
+      - Dropout layer: Regularizes the LSTM output.
       - Three Dense layers with Tanh activation to further transform the features.
       - Final Dense layer with Tanh activation to output a continuous action vector of dimension `n_stocks`
         (each value in the range [-1, 1], representing normalized buy/sell signals for each stock).

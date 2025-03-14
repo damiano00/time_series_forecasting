@@ -110,7 +110,6 @@ def get_indicators(data_folder, with_sentiment):
         df['date'] = pd.to_datetime(df['date']).dt.date
         df.sort_values('date', inplace=True)
         df.set_index('date', inplace=True)
-        # df['adj_close'] = scaler.fit_transform(df['adj_close'].values.reshape(-1, 1)).flatten()
         df[['open', 'high', 'low', 'close', 'adj_close']] = scaler.fit_transform(
             df[['open', 'high', 'low', 'close', 'adj_close']]
         )
@@ -183,8 +182,6 @@ def load_data(data_folder, n_stocks=30, sentiment=True):
 
 def backtest_agent(agent, env, time_window):
     # Retrieve historical prices from the dataset before forecasting starts
-    historical_prices = env.data['price'][:env.current_step]  # FIX: Correct historical price retrieval
-
     state = env.reset()
     state_seq = np.array([state] * time_window)
     portfolio_values = []
@@ -199,22 +196,16 @@ def backtest_agent(agent, env, time_window):
     while not done:
         action, _, _ = agent.select_action(state_seq)
         next_state, _, done, _ = env.step(action)
-
         current_portfolio = env.balance + np.sum(env.prices * env.stock_owned)
         portfolio_values.append(current_portfolio)
-
         # Store true prices AFTER executing the action
         true_prices.append(env.prices.copy())
-
-        # FIX: Scale predicted prices properly
+        # Store predicted prices AFTER executing the action
         predicted_prices.append(env.prices * (1 + 0.05 * action))  # Smaller action scaling
-
         # Update state sequence
         state_seq = np.vstack([state_seq[1:], next_state])
-
     return (
         portfolio_values,
-        np.array(historical_prices),  # FIX: Return correct historical prices
         np.array(true_prices),
         np.array(predicted_prices),
     )
@@ -349,7 +340,7 @@ def main(stocks, sentiment):
 
     # Evaluate the agent
     print('----- Evaluating agent -----')
-    portfolio_values, historical_prices, true_prices, predicted_prices = backtest_agent(agent, test_env, TIME_WINDOW)
+    portfolio_values, true_prices, predicted_prices = backtest_agent(agent, test_env, TIME_WINDOW)
     # Save evaluation results also with the stock names
     np.save(os.path.join(evaluations_path, 'true_prices.npy'), true_prices)
     np.save(os.path.join(evaluations_path, 'predicted_prices.npy'), predicted_prices)

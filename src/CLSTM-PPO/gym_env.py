@@ -2,7 +2,7 @@ import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
 from sklearn.metrics import median_absolute_error
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import StandardScaler
 from scipy.spatial.distance import mahalanobis
 
 
@@ -23,7 +23,7 @@ class StockTradingEnv(gym.Env):
     """
 
     def __init__(self, data, initial_balance=1e6, max_shares=100, reward_scaling=1e-4, turbulence_threshold=100,
-                 state_dim=211, sentiment=True, n_stocks=30, scaler=MinMaxScaler()):
+                 state_dim=211, sentiment=True, n_stocks=30, scaler=StandardScaler()):
         super(StockTradingEnv, self).__init__()
         self.n_stocks = n_stocks
         self.data = data  # Data dictionary with keys: 'price', 'MACD', 'RSI', 'CCI', 'ADX'
@@ -144,7 +144,6 @@ class StockTradingEnv(gym.Env):
         current_value = self._get_portfolio_value()
         self.portfolio_history.append(current_value)  # Track portfolio value
 
-        reward = (current_value - prev_value) * self.reward_scaling
         # penalize high volatility (Stronger penalty for excessive trading)
         reward = (current_value - prev_value) * self.reward_scaling
         reward -= 1e-3 * np.abs(np.mean(agent_action))  # Reduce weak trades
@@ -181,7 +180,7 @@ class StockTradingEnv(gym.Env):
         predicted_data = predicted_data[:min_len]
         actual_values = actual_values[:min_len]
 
-        # Rescale back if prices were normalized using MinMaxScaler
+        # Rescale back if prices were normalized using StandardScaler
         actual_values = self.scaler.inverse_transform(
             np.array(actual_values).reshape(-1, 1)
         ).flatten()

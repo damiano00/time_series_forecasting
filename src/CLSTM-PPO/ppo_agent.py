@@ -150,7 +150,7 @@ class PPOAgent:
         while timestep < total_timesteps:
             # For the cascaded architecture, the agent expects a sliding window of states.
             state = env.reset()  # Initial state from the environment (assumed shape: [state_dim])
-            # Initialize state sequence as multiple copies of the initial state (for simplicity)
+            # Initialize state sequence as multiple copies of the initial state
             state_seq = np.array([state] * self.time_window)
             done = False
             while not done:

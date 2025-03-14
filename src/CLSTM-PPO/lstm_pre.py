@@ -10,7 +10,7 @@ def build_lstm_pre(time_window, state_dim, feature_dim, dropout=0.4):
     Architecture:
       - Input: A sequence of states (time_window x state_dim).
       - One LSTM layer that processes the input sequence and returns its final hidden state.
-      - Three Dense (linear) layers, each followed by a Tanh activation.
+      - Three Dense (linear) layers, each followed by a Tanh activation, with dropout in between.
       - Output: A feature vector of dimension feature_dim.
 
     Args:
@@ -27,7 +27,7 @@ def build_lstm_pre(time_window, state_dim, feature_dim, dropout=0.4):
     # LSTM layer: processes the time-series sequence and returns the final hidden state.
     x = LSTM(units=feature_dim, activation='tanh', name="lstm_layer")(inputs)
 
-    # Three linear (Dense) layers with Tanh activations.
+    # Three linear (Dense) layers with Tanh activations, followed by dropout.
     x = Dense(feature_dim, activation='tanh', name="dense_layer_1")(x)
     x = Dropout(dropout)(x)
 
