@@ -6,9 +6,9 @@ if not os.path.exists('plots_comparison'):
     os.makedirs('plots_comparison')
 
 # Load stored price data
-true_prices = np.load('no_sentiment_5_202503130111/evaluations/true_prices.npy')
-predicted_prices_sen = np.load('sentiment_5_202503130047/evaluations/predicted_prices.npy')
-predicted_prices_non_sen = np.load('no_sentiment_5_202503130111/evaluations/predicted_prices.npy')
+true_prices = np.load('old1/no_sentiment_5_202503130111/evaluations/true_prices.npy')
+predicted_prices_sen = np.load('old1/sentiment_5_202503130047/evaluations/predicted_prices.npy')
+predicted_prices_non_sen = np.load('old1/no_sentiment_5_202503130111/evaluations/predicted_prices.npy')
 
 stock_idx = 1
 

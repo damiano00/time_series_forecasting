@@ -82,17 +82,19 @@ def check_stock_dates(folder_path):
             print(f"Error processing {file_name}: {e}")
 
 
-def get_indicators(data_folder, sentiment):
+def get_indicators(data_folder, with_sentiment):
     file_paths = sorted(glob.glob(os.path.join(data_folder, "*.csv")))
     if not file_paths:
         raise ValueError(f"No CSV files found in folder {data_folder}")
-    if sentiment:
+    if with_sentiment:
         indicators = {
             'price': {},
             'MACD': {},
             'RSI': {},
             'CCI': {},
             'ADX': {},
+            'sentiment_gpt': {},
+            'news_flag': {},
             'scaled_sentiment': {},
         }
     else:
@@ -113,15 +115,19 @@ def get_indicators(data_folder, sentiment):
             df[['open', 'high', 'low', 'close', 'adj_close']]
         )
         price = df['adj_close']
+        sentiment_gpt = df['sentiment_gpt'] if 'sentiment_gpt' in df.columns else None
+        news_flag = df['news_flag'] if 'news_flag' in df.columns else None
+        sentiment = df['scaled_sentiment'] if 'scaled_sentiment' in df.columns else None
         macd = compute_macd(df, price_col='adj_close')
         rsi = compute_rsi(df, price_col='adj_close')
         cci = compute_cci(df, window=20)
         adx = compute_adx(df, window=14)
         stock_key = os.path.splitext(os.path.basename(fp))[0]
-        if sentiment:
-            scaled_sentiment = np.mean(df['scaled_sentiment'].values)
-            scaled_sentiment = pd.Series([scaled_sentiment] * len(price), index=price.index)
-            indicators['scaled_sentiment'][stock_key] = scaled_sentiment
+        if with_sentiment:
+            df[['sentiment_gpt']] = scaler.fit_transform(df[['sentiment_gpt']])
+            indicators['news_flag'][stock_key] = news_flag
+            indicators['sentiment_gpt'][stock_key] = sentiment_gpt
+            indicators['scaled_sentiment'][stock_key] = sentiment
         indicators['price'][stock_key] = price
         indicators['MACD'][stock_key] = macd
         indicators['RSI'][stock_key] = rsi
@@ -158,7 +164,7 @@ def load_data(data_folder, n_stocks=30, sentiment=True):
       - Each array has shape (num_timesteps, n_stocks)
     """
     check_stock_dates(data_folder)
-    indicators = get_indicators(data_folder, sentiment=sentiment)
+    indicators = get_indicators(data_folder, with_sentiment=sentiment)
     common_index = determine_index_range(indicators)
     print(f"Common date range: {common_index[0]} to {common_index[-1]}")
     combined = {}
@@ -386,6 +392,9 @@ def main(stocks, sentiment):
 
 
 if __name__ == '__main__':
-    for n_stocks in [5, 25, 48]:
-        main(stocks=n_stocks, sentiment='sentiment')
-        main(stocks=n_stocks, sentiment='no_sentiment')
+    main(stocks=5, sentiment='sentiment')
+    main(stocks=5, sentiment='no_sentiment')
+    main(stocks=25, sentiment='sentiment')
+    main(stocks=25, sentiment='no_sentiment')
+    main(stocks=48, sentiment='sentiment')
+    main(stocks=48, sentiment='no_sentiment')

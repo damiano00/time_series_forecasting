@@ -2,7 +2,7 @@ from tensorflow.keras.layers import Input, LSTM, Dense, Dropout
 from tensorflow.keras.models import Model
 
 
-def build_lstm_pre(time_window, state_dim, feature_dim=128, dropout=0.4):
+def build_lstm_pre(time_window, state_dim, feature_dim, dropout=0.4):
     """
     LSTMpre: A feature extractor that takes a sequence of states (length=time_window, dimension=state_dim)
     and outputs a feature vector of dimension feature_dim.

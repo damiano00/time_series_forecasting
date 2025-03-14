@@ -11,13 +11,15 @@ class StockTradingEnv(gym.Env):
     Custom Gym environment for automated multi-stock trading.
     The state is a 181-dimensional vector:
       - [0]: current available balance.
-      - [1:31]: adjusted close prices for 30 stocks.
-      - [31:61]: current holdings for 30 stocks.
-      - [61:91]: MACD for 30 stocks.
-      - [91:121]: RSI for 30 stocks.
-      - [121:151]: CCI for 30 stocks.
-      - [151:181]: ADX for 30 stocks.
-      - [181:211]: Scaled sentiment for 30 stocks.
+      - [1:31]: adjusted close prices for n stocks.
+      - [31:61]: current holdings for n stocks.
+      - [61:91]: MACD for n stocks.
+      - [91:121]: RSI for n stocks.
+      - [121:151]: CCI for n stocks.
+      - [151:181]: ADX for n stocks.
+      - [181:211]: Scaled sentiment for n stocks.
+      - [211:241]: Sentiment GPT for n stocks.
+      - [241:271]: News flag for n stocks.
     """
 
     def __init__(self, data, initial_balance=1e6, max_shares=100, reward_scaling=1e-4, turbulence_threshold=100,

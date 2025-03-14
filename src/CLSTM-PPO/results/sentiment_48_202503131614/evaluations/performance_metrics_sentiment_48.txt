@@ -1,0 +1,3 @@
+Cumulative Return: 25.85%
+Maximum Earning Rate: 25.85%
+Sharpe Ratio: 5.10
