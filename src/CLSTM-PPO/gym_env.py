@@ -69,20 +69,24 @@ class StockTradingEnv(gym.Env):
         adx = self.data['ADX'][self.current_step, :].astype(np.float32)
         adx = np.nan_to_num(adx, nan=0.0)
         if self.sentiment:
+            sentiment_gpt = self.data['sentiment_gpt'][self.current_step, :].astype(np.float32)
+            sentiment_gpt = np.nan_to_num(sentiment_gpt, nan=0.0)
+            news_flag = self.data['news_flag'][self.current_step, :].astype(np.float32)
+            news_flag = np.nan_to_num(news_flag, nan=0.0)
             scaled_sentiment = self.data['scaled_sentiment'][self.current_step, :].astype(np.float32)
             scaled_sentiment = np.nan_to_num(scaled_sentiment, nan=0.0)
-            return macd, rsi, cci, adx, scaled_sentiment
+            return macd, rsi, cci, adx, sentiment_gpt, news_flag, scaled_sentiment
         else:
             return macd, rsi, cci, adx
 
     def _get_state(self):
         if self.sentiment:
-            macd, rsi, cci, adx, scaled_sentiment = self._get_indicators()
+            macd, rsi, cci, adx, sentiment_gpt, news_flag, scaled_sentiment = self._get_indicators()
             state = np.concatenate((
                 np.array([self.balance], dtype=np.float32),
                 self.prices,
                 self.stock_owned.astype(np.float32),
-                macd, rsi, cci, adx, scaled_sentiment
+                macd, rsi, cci, adx, sentiment_gpt, news_flag, scaled_sentiment
             ))
             return state
         else:

@@ -233,7 +233,7 @@ def main(stocks, sentiment):
     TIME_WINDOW = 15 # Number of timesteps to consider for each state
     SENTIMENT = sentiment
     N_STOCKS = stocks
-    STATE_DIM = 1 + N_STOCKS * 7 if SENTIMENT == "sentiment" else 1 + N_STOCKS * 6
+    STATE_DIM = 1 + N_STOCKS * 9 if SENTIMENT == "sentiment" else 1 + N_STOCKS * 6
     FEATURE_DIM = 64
     TOTAL_TIMESTEPS = 50000
     UPDATE_TIMESTEP = 256
