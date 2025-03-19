@@ -1,5 +1,4 @@
-## Title
-
+# Title
 Time Series Analysis and Forecasting Applied to Automated Financial Trading
 
 ## Abstract
