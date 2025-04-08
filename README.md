@@ -10,7 +10,7 @@ Recent advances in Deep Reinforcement Learning (DRL) have led to improved stock 
 [Attribution-NonCommercial 4.0 International, Version 4.0, January 2004](https://creativecommons.org/licenses/by-nc/4.0/)
 
 
-## Acknowledgements
+## References
 
  - [Dong, Zihan, Xinyu Fan, and Zhiyuan Peng. "Fnspid: A comprehensive financial news dataset in time series." Proceedings of the 30th ACM SIGKDD Conference on Knowledge Discovery and Data Mining. 2024.](https://dl.acm.org/doi/abs/10.1145/3637528.3671629)
 
